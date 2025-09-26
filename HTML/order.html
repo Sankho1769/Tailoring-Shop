@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Order Online - Jolly Ladies Tailor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --primary-color: #0033a0; /* Royal Blue */
+      --secondary-color: #4169e1; /* Brighter Royal Blue */
+      --accent-gold: #f6d365;
+      --text-dark: #333;
+      --text-light: #fff;
+      --bg-light: #f8faff; /* Light blue tint */
+      --bg-section: #f0f4ff; /* Slightly darker blue tint */
+      --success-color: #28a745;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: var(--bg-light);
+      color: var(--text-dark);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    header {
+      background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
+      color: var(--text-light);
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 1001;
+    }
+
+    .logo img {
+      height: 60px;
+    }
+
+    nav ul {
+      list-style: none;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    nav ul li a {
+      color: var(--text-light);
+      text-decoration: none;
+      font-weight: bold;
+      padding: 6px 12px;
+      border-radius: 6px;
+      position: relative;
+      transition: color 0.3s ease;
+    }
+    
+    nav ul li a::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 2px;
+        background-color: var(--accent-gold);
+        transition: width 0.3s ease;
+    }
+
+    nav ul li a:hover::after, nav ul li a.active::after {
+      width: 100%;
+    }
+    
+    nav ul li a.active {
+      color: var(--accent-gold);
+    }
+    
+    .container {
+        display: flex;
+        width: 100%;
+        max-width: 1400px;
+        margin: 30px auto;
+        padding: 0 20px;
+        gap: 30px;
+    }
+
+    .sidebar {
+        width: 280px;
+        flex-shrink: 0;
+        background-color: #fff;
+        padding: 25px;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        height: fit-content;
+    }
+    
+    .sidebar h3 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary-color);
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    
+    .sidebar strong {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--primary-color);
+    }
+    
+    .filter-input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        font-family: 'Montserrat', sans-serif;
+    }
+    
+    .sidebar label {
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .main-content {
+        flex: 1;
+    }
+    
+    .main-content h1 {
+        font-family: 'Playfair Display', serif;
+        color: var(--primary-color);
+        font-size: 2.8rem;
+        margin-bottom: 30px;
+    }
+
+    .section h2 {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.2rem;
+        color: var(--primary-color);
+        margin-bottom: 20px;
+        border-bottom: 2px solid var(--secondary-color);
+        padding-bottom: 10px;
+    }
+
+    .products {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 20px;
+    }
+
+    .product {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        text-align: center;
+        overflow: hidden;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .product:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 25px rgba(0,0,0,0.12);
+    }
+    
+    .product img {
+        width: 100%;
+        height: 180px;
+        object-fit: cover;
+    }
+    
+    .product-info {
+        padding: 15px;
+    }
+
+    .product h4 {
+        font-size: 1rem;
+        margin-bottom: 5px;
+        color: var(--text-dark);
+    }
+    
+    .product p {
+        font-size: 1.1rem;
+        font-weight: bold;
+        color: var(--primary-color);
+        margin-bottom: 10px;
+    }
+
+    .product button {
+        background: var(--secondary-color);
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 50px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.3s ease;
+    }
+    
+    .product button:hover {
+        background-color: var(--primary-color);
+    }
+
+    /* Cart */
+    .cart-toggle {
+      position: fixed;
+      top: 90px;
+      right: 20px;
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      cursor: pointer;
+      border-radius: 50px;
+      z-index: 1000;
+      font-weight: bold;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+    .cart-panel {
+      position: fixed;
+      top: 0;
+      right: -400px;
+      width: 380px;
+      height: 100%;
+      background: white;
+      box-shadow: -4px 0 15px rgba(0,0,0,0.15);
+      transition: right 0.3s ease-in-out;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+    }
+    .cart-panel.open {
+      right: 0;
+    }
+    .cart-header {
+        padding: 20px;
+        font-family: 'Playfair Display', serif;
+        font-size: 1.8rem;
+        background-color: var(--primary-color);
+        color: white;
+    }
+    
+    #cartItems {
+        padding: 20px;
+        overflow-y: auto;
+        flex-grow: 1;
+    }
+    
+    .cart-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 15px;
+    }
+    
+    .cart-item-details h4 {
+      margin: 0 0 5px;
+    }
+    
+    .qty-controls {
+        display: flex;
+        align-items: center;
+    }
+    
+    .qty-controls button {
+      padding: 3px 8px;
+      margin: 0 5px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      background-color: #f5f5f5;
+    }
+    .remove-btn {
+      color: #e74c3c;
+      cursor: pointer;
+      font-size: 13px;
+      margin-left: 10px;
+    }
+    .cart-footer {
+      border-top: 2px solid #ccc;
+      padding: 20px;
+      background-color: var(--bg-section);
+    }
+    .cart-footer div {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+    
+    .checkout-btn {
+      background-color: var(--success-color);
+      color: white;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 10px;
+      width: 100%;
+      font-size: 1rem;
+      font-weight: bold;
+    }
+    .checkout-btn:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+
+    .popup {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      background: var(--success-color);
+      color: white;
+      padding: 15px 30px;
+      border-radius: 8px;
+      transition: transform 0.3s;
+      z-index: 10000;
+    }
+    .popup.show {
+      transform: translate(-50%, -50%) scale(1);
+    }
+    
+    @media (max-width: 768px) {
+        .container {
+            flex-direction: column;
+        }
+        .sidebar {
+            width: 100%;
+        }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+        <img src="./../image/Shop_logo.png" alt="Jolly Ladies Tailor Logo">
+    </div> 
+    <nav>
+        <ul>
+            <li><a href="home.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="gallery.html">Gallery</a></li>
+            <li><a href="order.html" class="active">Order</a></li>
+            <li><a href="contact.html">Contact</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+    </nav>
+  </header>
+
+  <button class="cart-toggle" id="cartToggle">🛒 Cart (<span id="cartQty">0</span>)</button>
+
+  <div class="cart-panel" id="cartPanel">
+    <div class="cart-header">Your Shopping Cart</div>
+    <div id="cartItems"></div>
+    <div class="cart-footer">
+      <div><strong>Subtotal:</strong> <span>₹<span id="subtotalPrice">0</span></span></div>
+      <div><strong>Tax (10%):</strong> <span>₹<span id="taxAmount">0</span></span></div>
+      <div><strong>Total:</strong> <strong>₹<span id="totalPrice">0</span></strong></div>
+      <button class="checkout-btn" id="checkoutBtn" disabled>Proceed to Checkout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="sidebar">
+      <h3>Filters</h3>
+      <strong>Search:</strong><br>
+      <input type="text" id="searchInput" class="filter-input" placeholder="Search by name">
+
+      <strong>Price Range:</strong><br>
+      <input type="number" id="minPrice" class="filter-input" placeholder="Min Price">
+      <input type="number" id="maxPrice" class="filter-input" placeholder="Max Price">
+
+      <strong>Category:</strong><br>
+      <label><input type="checkbox" class="filter" value="casual"> Casual</label><br>
+      <label><input type="checkbox" class="filter" value="party"> Party</label><br>
+      <label><input type="checkbox" class="filter" value="ethnic"> Ethnic</label><br>
+      <label><input type="checkbox" class="filter" value="office"> Office</label>
+    </div>
+
+    <div class="main-content">
+      <h1>Our Collections</h1>
+      <div id="product-sections"></div>
+    </div>
+  </div>
+
+  <div id="popup" class="popup">Added to Cart!</div>
+
+  <script>
+    const namePools = {
+      Tradition: ["Saree", "Kurti", "Salwar Suit", "Dupatta Set", "Anarkali", "Churidar", "Patiala", "Lehenga Choli", "Ethnic Gown", "Traditional Skirt", "Ghagra", "Embroidered Kurti"],
+      Wedding: ["Bridal Lehenga", "Heavy Saree", "Silk Kurti", "Reception Gown", "Designer Suit", "Wedding Gown", "Sharara Set", "Velvet Lehenga", "Zari Work Dress", "Embellished Anarkali", "Banarasi Saree", "Bride Special Kurti"],
+      Child: ["Kids Frock", "Kids Mini Dress", "Kids Ethnic Wear", "Party Frock", "Tiny Suit", "Cartoon Dress", "Fairy Frock", "Kid's Lehenga", "Floral Dress", "Striped Set", "Printed Gown", "Cotton Frock"],
+      Party: ["Party Dress", "Evening Gown", "Mini Dress", "Shimmer Gown", "Velvet Dress", "Sequin Top", "Cocktail Gown", "Satin Dress", "Off Shoulder", "Fashion Gown", "Ruffle Dress", "Net Dress"],
+      Formal: ["Office Kurti", "Formal Suit", "Blazer Set", "Workwear Dress", "Plain Kurti", "Pinstripe Suit", "Formal Top", "Tunic", "Neutral Kurti", "Office Gown", "Collared Dress", "Work Set"]
+    };
+
+    const productImages = {
+      "Saree": "./../image/red_saree.png", "Kurti": "./../image/kurti.png", "Salwar Suit": "./../image/salwar_suit.png", "Dupatta Set": "./../image/dupatta_set.png", "Anarkali": "./../image/anarkali.png", "Churidar": "./../image/churidar.png", "Patiala": "./../image/patiala.png", "Lehenga Choli": "./../image/lehenga_choli.png", "Ethnic Gown": "./../image/ethnic_gown.png", "Traditional Skirt": "./../image/traditional_skirttraditional__skirt.webp", "Ghagra": "./../image/ghagra.png", "Embroidered Kurti": "./../image/embroidered_kurti.png",
+      "Bridal Lehenga": "./../image/bridal_lehenga.png", "Heavy Saree": "./../image/heavy_saree.png", "Silk Kurti": "./../image/silk_kurti.png", "Reception Gown": "./../image/reception_gown.png", "Designer Suit": "./../image/designer_suit.png", "Wedding Gown": "./../image/wedding_gown.png", "Sharara Set": "./../image/sharara_set.png", "Velvet Lehenga": "./../image/velvet_lehenga.png", "Zari Work Dress": "./../image/zari_work_dress.png", "Embellished Anarkali": "./../image/embellished_anarkali.png", "Banarasi Saree": "./../image/banarasi_saree.png", "Bride Special Kurti": "./../image/bride_special_kurti.png",
+      "Kids Frock": "./../image/kids_frock.png", "Kids Mini Dress": "./../image/Mini dress.png", "Kids Ethnic Wear": "./../image/kids_ethnic_wear.jpg", "Party Frock": "./../image/party_frock.jpg", "Tiny Suit": "./../image/tiny_suit.jpg", "Cartoon Dress": "./../image/cartoon_dress.jpg", "Fairy Frock": "./../image/fairy_frock.jpg", "Kid's Lehenga": "./../image/kids_lehenga.jpg", "Floral Dress": "./../image/floral_dress.jpg", "Striped Set": "./../image/striped_set.jpg", "Printed Gown": "./../image/printed_gown.jpg", "Cotton Frock": "./../image/cotton_frock.jpg",
+      "Party Dress": "./../image/party_dress.png", "Evening Gown": "./../image/evening_gown.png", "Mini Dress": "./../image/Mini dress lady.png", "Shimmer Gown": "./../image/shimmer_gown.png", "Velvet Dress": "./../image/velvet_dress.png", "Sequin Top": "./../image/sequin_top.png", "Cocktail Gown": "./../image/cocktail_gown.png", "Satin Dress": "./../image/satin_dress.png", "Off Shoulder": "./../image/off_shoulder.png", "Fashion Gown": "./../image/fashion_gown.png", "Ruffle Dress": "./../image/ruffle_dress.png", "Net Dress": "./../image/net_dress.png",
+      "Office Kurti": "./../image/office_kurti.png", "Formal Suit": "./../image/formal_suit.png", "Blazer Set": "./../image/blazer_set.png", "Workwear Dress": "./../image/workwear_dress.png", "Plain Kurti": "./../image/plain_kurti.png", "Pinstripe Suit": "./../image/pinstripe_suit.png", "Formal Top": "./../image/formal_top.png", "Tunic": "./../image/tunic.png", "Neutral Kurti": "./../image/neutral_kurti.png", "Office Gown": "./../image/office_gown.png", "Collared Dress": "./../image/collared_dress.png", "Work Set": "./../image/work_set.png"
+    };
+
+    const productPrices = {
+        "Saree": 1899, "Kurti": 899, "Salwar Suit": 2199, "Dupatta Set": 799, "Anarkali": 2499, "Churidar": 1199, "Patiala": 1599, "Lehenga Choli": 3499, "Ethnic Gown": 2899, "Traditional Skirt": 1399, "Ghagra": 2699, "Embroidered Kurti": 1699,
+        "Bridal Lehenga": 14999, "Heavy Saree": 7999, "Silk Kurti": 2499, "Reception Gown": 8999, "Designer Suit": 6999, "Wedding Gown": 19999, "Sharara Set": 4599, "Velvet Lehenga": 9999, "Zari Work Dress": 7599, "Embellished Anarkali": 5999, "Banarasi Saree": 6599, "Bride Special Kurti": 3299,
+        "Kids Frock": 799, "Kids Mini Dress": 999, "Kids Ethnic Wear": 1499, "Party Frock": 1299, "Tiny Suit": 1199, "Cartoon Dress": 899, "Fairy Frock": 1599, "Kid's Lehenga": 2199, "Floral Dress": 1099, "Striped Set": 949, "Printed Gown": 1399, "Cotton Frock": 699,
+        "Party Dress": 2999, "Evening Gown": 4999, "Mini Dress": 1999, "Shimmer Gown": 3499, "Velvet Dress": 3199, "Sequin Top": 1499, "Cocktail Gown": 4599, "Satin Dress": 2299, "Off Shoulder": 2599, "Fashion Gown": 5499, "Ruffle Dress": 2799, "Net Dress": 2399,
+        "Office Kurti": 1299, "Formal Suit": 3999, "Blazer Set": 4599, "Workwear Dress": 2499, "Plain Kurti": 999, "Pinstripe Suit": 4299, "Formal Top": 1199, "Tunic": 1399, "Neutral Kurti": 1099, "Office Gown": 2899, "Collared Dress": 2199, "Work Set": 3499
+    };
+    
+    const products = [
+      { category: "ethnic", }, { category: "ethnic", }, { category: "office", }, { category: "party", },
+      { category: "party", }, { category: "office", }, { category: "casual", }, { category: "casual", }
+    ];
+
+    let cart = {};
+
+    function generateSections() {
+      const sectionNames = Object.keys(namePools);
+      const container = document.getElementById('product-sections');
+      container.innerHTML = '';
+
+      sectionNames.forEach(sectionName => {
+        const section = document.createElement('div');
+        section.classList.add('section');
+        section.innerHTML = `<h2>${sectionName}</h2><div class="products"></div>`;
+        const productGrid = section.querySelector('.products');
+        const nameList = namePools[sectionName];
+
+        for (let j = 0; j < 12; j++) {
+          const p = products[j % products.length];
+          const productName = nameList[j % nameList.length];
+          const imgSrc = productImages[productName] || "./../image/default.png";
+          const price = productPrices[productName] || 1999;
+
+          const productDiv = document.createElement('div');
+          productDiv.className = `product ${p.category}`;
+          productDiv.setAttribute('data-name', productName.toLowerCase());
+          productDiv.setAttribute('data-price', price);
+          
+          productDiv.innerHTML = `
+            <img src="${imgSrc}" alt="${productName}" onerror="this.onerror=null;this.src='https://placehold.co/200x200/f0f4ff/0033a0?text=Image';">
+            <div class="product-info">
+              <h4>${productName}</h4>
+              <p>₹${price}</p>
+              <button onclick="addToCart('${productName}', ${price})">Add to Cart</button>
+            </div>
+          `;
+          productGrid.appendChild(productDiv);
+        }
+        container.appendChild(section);
+      });
+    }
+
+    function addToCart(name, price) {
+      if (!cart[name]) {
+        cart[name] = { price, quantity: 1 };
+      } else {
+        cart[name].quantity += 1;
+      }
+      updateCart();
+      showPopup("Added to Cart!");
+    }
+
+    function updateCart() {
+      const cartItems = document.getElementById('cartItems');
+      cartItems.innerHTML = '';
+      let totalQty = 0;
+      let subtotal = 0;
+
+      for (let item in cart) {
+        const { price, quantity } = cart[item];
+        totalQty += quantity;
+        subtotal += price * quantity;
+
+        const div = document.createElement('div');
+        div.className = 'cart-item';
+        div.innerHTML = `
+          <div class="cart-item-details">
+            <h4>${item}</h4>
+            <p>₹${price} x ${quantity}</p>
+          </div>
+          <div class="qty-controls">
+            <button onclick="changeQty('${item}', -1)">-</button>
+            <span>${quantity}</span>
+            <button onclick="changeQty('${item}', 1)">+</button>
+            <span class="remove-btn" onclick="removeItem('${item}')">Remove</span>
+          </div>
+        `;
+        cartItems.appendChild(div);
+      }
+
+      const taxAmount = (subtotal * 0.10).toFixed(2);
+      const totalPrice = (subtotal + parseFloat(taxAmount)).toFixed(2);
+
+      document.getElementById('cartQty').innerText = totalQty;
+      document.getElementById('subtotalPrice').innerText = subtotal.toFixed(2);
+      document.getElementById('taxAmount').innerText = taxAmount;
+      document.getElementById('totalPrice').innerText = totalPrice;
+      document.getElementById('checkoutBtn').disabled = totalQty === 0;
+    }
+
+    function changeQty(name, delta) {
+      if (cart[name]) {
+        cart[name].quantity += delta;
+        if (cart[name].quantity <= 0) {
+          delete cart[name];
+        }
+        updateCart();
+      }
+    }
+
+    function removeItem(name) {
+      delete cart[name];
+      updateCart();
+    }
+
+    function showPopup(msg) {
+      const popup = document.getElementById('popup');
+      popup.innerText = msg;
+      popup.classList.add('show');
+      setTimeout(() => popup.classList.remove('show'), 2000);
+    }
+    
+    function downloadFile(content, fileName, contentType) {
+        const a = document.createElement("a");
+        const file = new Blob([content], { type: contentType });
+        a.href = URL.createObjectURL(file);
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    function generateOrderRecord() {
+        let csvContent = "Order ID,Date,Product Name,Price,Quantity,Item Total\n";
+        const orderId = `JL-${Date.now()}`;
+        const orderDate = new Date().toLocaleString();
+        
+        for(const item in cart) {
+            const { price, quantity } = cart[item];
+            const itemTotal = price * quantity;
+            csvContent += `${orderId},"${orderDate}","${item}",${price},${quantity},${itemTotal}\n`;
+        }
+        downloadFile(csvContent, `order-record-${orderId}.csv`, "text/csv;charset=utf-8;");
+        return orderId;
+    }
+
+    function generateCustomerInvoicePDF(orderId) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(20);
+        doc.text("Jolly Ladies Tailor", 105, 20, null, null, "center");
+        doc.setFontSize(16);
+        doc.text("INVOICE", 105, 30, null, null, "center");
+
+        doc.setFontSize(12);
+        doc.text(`Order ID: ${orderId}`, 15, 45);
+        doc.text(`Date: ${new Date().toLocaleString()}`, 15, 52);
+
+        doc.line(15, 60, 195, 60);
+        doc.text("Product", 20, 67);
+        doc.text("Qty", 120, 67);
+        doc.text("Price", 145, 67);
+        doc.text("Total", 175, 67);
+        doc.line(15, 70, 195, 70);
+        
+        let subtotal = 0;
+        let yPos = 78;
+
+        for(const item in cart) {
+            const { price, quantity } = cart[item];
+            const itemTotal = price * quantity;
+            subtotal += itemTotal;
+
+            doc.text(item, 20, yPos);
+            doc.text(String(quantity), 120, yPos);
+            doc.text(`₹${price}`, 145, yPos);
+            doc.text(`₹${itemTotal}`, 175, yPos);
+            yPos += 7;
+        }
+
+        const tax = subtotal * 0.10;
+        const total = subtotal + tax;
+        doc.line(15, yPos, 195, yPos);
+        yPos += 10;
+        doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, 145, yPos);
+        yPos += 7;
+        doc.text(`Tax (10%): ₹${tax.toFixed(2)}`, 145, yPos);
+        yPos += 7;
+        doc.setFont("helvetica", "bold");
+        doc.text(`TOTAL: ₹${total.toFixed(2)}`, 145, yPos);
+        doc.setFont("helvetica", "normal");
+        
+        yPos += 20;
+        doc.setFontSize(10);
+        doc.text("Thank you for your purchase!", 105, yPos, null, null, "center");
+
+        doc.save(`invoice-${orderId}.pdf`);
+    }
+
+    document.getElementById('cartToggle').addEventListener('click', () => {
+      document.getElementById('cartPanel').classList.toggle('open');
+    });
+
+    document.getElementById('checkoutBtn').addEventListener('click', () => {
+      if (Object.keys(cart).length === 0) {
+        showPopup("Your cart is empty. Add items to place an order.");
+      } else {
+        const orderId = generateOrderRecord(); 
+        generateCustomerInvoicePDF(orderId);
+
+        cart = {};
+        updateCart();
+        showPopup("Order Placed! Check your downloads.");
+        document.getElementById('cartPanel').classList.remove('open');
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        generateSections();
+
+        const filters = document.querySelectorAll('.filter');
+        const searchInput = document.getElementById('searchInput');
+        const minPrice = document.getElementById('minPrice');
+        const maxPrice = document.getElementById('maxPrice');
+
+        filters.forEach(f => f.addEventListener('change', applyFilters));
+        searchInput.addEventListener('input', applyFilters);
+        minPrice.addEventListener('input', applyFilters);
+        maxPrice.addEventListener('input', applyFilters);
+
+        function applyFilters() {
+          const activeCategories = Array.from(filters).filter(f => f.checked).map(f => f.value);
+          const searchQuery = searchInput.value.toLowerCase();
+          const min = parseFloat(minPrice.value) || 0;
+          const max = parseFloat(maxPrice.value) || Infinity;
+          const allProducts = document.querySelectorAll('.product');
+
+          allProducts.forEach(p => {
+            const name = p.getAttribute('data-name');
+            const price = parseFloat(p.getAttribute('data-price'));
+            const category = Array.from(p.classList).find(c => ['casual', 'party', 'ethnic', 'office'].includes(c));
+            const categoryMatch = activeCategories.length === 0 || activeCategories.includes(category);
+            const searchMatch = name.includes(searchQuery);
+            const priceMatch = price >= min && price <= max;
+
+            if (categoryMatch && searchMatch && priceMatch) {
+              p.style.display = 'block';
+            } else {
+              p.style.display = 'none';
+            }
+          });
+        }
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Western Dresses - Jolly Ladies Tailor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #0033a0; /* Royal Blue */
+      --secondary-color: #4169e1; /* Brighter Royal Blue */
+      --accent-gold: #f6d365;
+      --text-dark: #333;
+      --text-light: #fff;
+      --bg-light: #f8faff; /* Light blue tint */
+      --bg-section: #f0f4ff; /* Slightly darker blue tint */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: var(--bg-light);
+      color: var(--text-dark);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    header {
+      background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
+      color: var(--text-light);
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo img {
+      height: 60px;
+    }
+
+    nav ul {
+      list-style: none;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    nav ul li a {
+      color: var(--text-light);
+      text-decoration: none;
+      font-weight: bold;
+      padding: 6px 12px;
+      border-radius: 6px;
+      position: relative;
+      transition: color 0.3s ease;
+    }
+    
+    nav ul li a::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 2px;
+        background-color: var(--accent-gold);
+        transition: width 0.3s ease;
+    }
+
+    nav ul li a:hover::after, nav ul li a.active::after {
+      width: 100%;
+    }
+    
+    nav ul li a.active {
+      color: var(--accent-gold);
+    }
+    
+    main {
+        width: 100%;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 100px 20px 80px;
+      background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+      color: var(--text-light);
+    }
+
+    .hero h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 3.8rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+    }
+
+    .hero p {
+      font-size: 1.3rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.95);
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    
+    .section {
+        padding: 80px 0;
+    }
+    
+    .section:nth-of-type(even) {
+        background-color: var(--bg-section);
+    }
+
+    .container {
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+    
+    .section-title {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.8rem;
+        text-align: center;
+        margin-bottom: 50px;
+        color: var(--primary-color);
+        position: relative;
+    }
+    
+    .section-title::after {
+        content: '';
+        display: block;
+        width: 60px;
+        height: 3px;
+        background-color: var(--secondary-color);
+        margin: 10px auto 0;
+        border-radius: 2px;
+    }
+
+    .intro-text {
+      font-size: 1.1rem;
+      line-height: 1.8;
+      max-width: 800px;
+      margin: 0 auto 50px;
+      text-align: center;
+    }
+
+    /* Features Section */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 30px;
+      text-align: center;
+    }
+
+    .feature-card {
+      background-color: #fff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+
+    .feature-card h3 {
+      font-family: 'Playfair Display', serif;
+      color: var(--primary-color);
+      font-size: 1.4rem;
+      margin-bottom: 10px;
+    }
+
+    /* Gallery Section */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 25px;
+    }
+    
+    .gallery-item {
+        background-color: #fff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .gallery-item:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 12px 25px rgba(0,0,0,0.12);
+    }
+    
+    .gallery-item img {
+        width: 100%;
+        height: 320px;
+        object-fit: cover;
+        display: block;
+    }
+    
+    /* CTA Section */
+    .cta-section {
+        background: var(--primary-color);
+        text-align: center;
+        padding: 60px 20px;
+    }
+    
+    .cta-section h2 {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.2rem;
+        margin-bottom: 20px;
+        color: var(--text-light);
+    }
+    
+    .cta-button {
+        background-color: var(--accent-gold);
+        color: var(--text-dark);
+        padding: 15px 30px;
+        text-decoration: none;
+        font-weight: bold;
+        border-radius: 50px;
+        transition: transform 0.3s ease, background-color 0.3s ease;
+        display: inline-block;
+    }
+    
+    .cta-button:hover {
+        background-color: #fff;
+        transform: scale(1.05);
+    }
+
+    /* Footer */
+    footer {
+      background-color: #001f3f; /* Navy Blue */
+      color: var(--text-light);
+      text-align: center;
+      padding: 30px 20px;
+      font-size: 0.9rem;
+      margin-top: auto;
+    }
+    
+    /* Scroll Animations */
+    .reveal {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+    }
+    
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Responsive Design */
+    @media screen and (max-width: 768px) {
+      header { justify-content: center; }
+      .logo { margin-bottom: 10px; }
+      nav ul { flex-direction: column; align-items: center; gap: 10px; margin-top: 15px; width: 100%; }
+      .hero h1 { font-size: 2.8rem; }
+      .hero p { font-size: 1.1rem; }
+      .section-title { font-size: 2.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <img src="./../../image/Shop_logo.png" alt="Jolly Ladies Tailor Logo">
+    </div>
+    <nav>
+      <ul>
+        <li><a href="./../home.html">Home</a></li>
+        <li><a href="./../about.html">About</a></li>
+        <li><a href="./../services.html" class="active">Services</a></li>
+        <li><a href="./../gallery.html">Gallery</a></li>
+        <li><a href="./../contact.html">Contact</a></li>
+        <li><a href="./../login.html">Login</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+        <h1 class="reveal">Western Dress Showcase</h1>
+        <p class="reveal" style="transition-delay: 100ms;">Discover the charm and heritage of Western dresses, tailored for the modern spirit.</p>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <p class="intro-text reveal">
+         Western dresses have a rich history inspired by the rugged beauty of the American frontier. Combining practical design with unique decorative elements, these dresses are both comfortable and stylish—ideal for a range of occasions, from country fairs to elegant gatherings.
+        </p>
+        <div class="features-grid">
+          <div class="feature-card reveal">
+            <h3>Classic Western</h3>
+            <p>Embracing traditional elements and vintage charm, the classic western dress often features embroidery, fringe, and earthy tones.</p>
+          </div>
+          <div class="feature-card reveal" style="transition-delay: 100ms;">
+            <h3>Modern Western</h3>
+            <p>Fusing contemporary cuts with western style, modern designs offer a fresh take while preserving authentic details.</p>
+          </div>
+          <div class="feature-card reveal" style="transition-delay: 200ms;">
+            <h3>Rustic Charm</h3>
+            <p>Infused with a relaxed vibe and a touch of bohemian spirit, this style is perfect for outdoor events and celebrations.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section gallery-section">
+        <div class="container">
+            <h2 class="section-title reveal">Our Western Dress Gallery</h2>
+            <div class="gallery-grid">
+                <div class="gallery-item reveal"><img src="./../../image/Classic Western Dress.png" alt="Classic Western Dress"></div>
+                <div class="gallery-item reveal" style="transition-delay: 100ms;"><img src="./../../image/Modern Western Dress.png" alt="Modern Western Dress"></div>
+                <div class="gallery-item reveal" style="transition-delay: 200ms;"><img src="./../../image/Rustic Charm Western Dress.png" alt="Rustic Charm Western Dress"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <h2 class="section-title reveal">About Western Dresses</h2>
+        <p class="intro-text reveal">
+           The western dress style has evolved over time, marrying elements of frontier tradition with modern fashion sensibilities. It reflects a journey from rustic workwear to a celebrated fashion statement. Whether featuring decorative stitching, bold prints, or innovative silhouettes, every western dress tells a story of resilience and creativity.
+        </p>
+      </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="container reveal">
+            <h2>Ready to Find Your Western Style?</h2>
+            <p style="margin-bottom: 30px; opacity: 0.9;">Contact us for a free consultation and let us help you create a western-inspired dress that's perfectly you.</p>
+            <a href="./../contact.html" class="cta-button">Get in Touch</a>
+        </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Jolly Ladies Tailor. Crafted with Love & Elegance in Kolkata.</p>
+  </footer>
+
+<script>
+    const revealElements = document.querySelectorAll('.reveal');
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+            }
+        });
+    }, {
+        threshold: 0.1
+    });
+    revealElements.forEach(el => {
+        revealObserver.observe(el);
+    });
+</script>
+
+</body>
+</html>

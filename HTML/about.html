@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>About Us - Jolly Ladies Tailor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #0033a0; /* Royal Blue */
+      --secondary-color: #4169e1; /* Brighter Royal Blue */
+      --accent-gold: #f6d365;
+      --accent-rose: #fda085;
+      --text-dark: #333;
+      --text-light: #fff;
+      --bg-light: #f8faff; /* Light blue tint */
+      --bg-section: #f0f4ff; /* Slightly darker blue tint */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: var(--bg-light);
+      color: var(--text-dark);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    header {
+      background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
+      color: var(--text-light);
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo img {
+      height: 60px;
+    }
+
+    nav ul {
+      list-style: none;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    nav ul li a {
+      color: var(--text-light);
+      text-decoration: none;
+      font-weight: bold;
+      padding: 6px 12px;
+      border-radius: 6px;
+      position: relative;
+      transition: color 0.3s ease;
+    }
+    
+    nav ul li a::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 2px;
+        background-color: var(--accent-gold);
+        transition: width 0.3s ease;
+    }
+
+    nav ul li a:hover::after, nav ul li a.active::after {
+      width: 100%;
+    }
+    
+    nav ul li a.active {
+      color: var(--accent-gold);
+    }
+    
+    main {
+        width: 100%;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 100px 20px 80px;
+      background: linear-gradient(135deg, var(--accent-gold), var(--accent-rose));
+      color: var(--text-light);
+    }
+
+    .hero h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 3.8rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+    }
+
+    .hero p {
+      font-size: 1.3rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.95);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .section {
+        padding: 80px 0;
+    }
+    
+    .section:nth-of-type(odd) {
+        background-color: var(--bg-section);
+    }
+
+    .container {
+        width: 100%;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+    
+    .section-title {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.8rem;
+        text-align: center;
+        margin-bottom: 50px;
+        color: var(--primary-color);
+        position: relative;
+    }
+    
+    .section-title::after {
+        content: '';
+        display: block;
+        width: 60px;
+        height: 3px;
+        background-color: var(--secondary-color);
+        margin: 10px auto 0;
+        border-radius: 2px;
+    }
+    
+    /* Story Section */
+    .story-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 50px;
+        align-items: center;
+        margin-bottom: 50px;
+    }
+
+    .story-layout:last-child {
+        margin-bottom: 0;
+    }
+
+    .story-image img {
+        width: 100%;
+        height: auto;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .story-text h3 {
+        font-family: 'Playfair Display', serif;
+        font-size: 2rem;
+        color: var(--primary-color);
+        margin-bottom: 15px;
+    }
+    
+    .story-text p {
+        line-height: 1.8;
+        font-size: 1.05rem;
+    }
+    
+    /* USP Section */
+    .usp-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 30px;
+    }
+    
+    .usp-card {
+        background-color: #fff;
+        padding: 30px;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        border-bottom: 4px solid var(--secondary-color);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .usp-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 12px 25px rgba(0,0,0,0.1);
+    }
+
+    .usp-card .icon {
+        width: 50px;
+        height: 50px;
+        margin: 0 auto 20px;
+        color: var(--primary-color);
+    }
+    
+    .usp-card h3 {
+        font-size: 1.3rem;
+        margin-bottom: 10px;
+        color: var(--primary-color);
+        font-family: 'Playfair Display', serif;
+    }
+    
+    .usp-card p {
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+    
+    /* CTA Section */
+    .cta-section {
+        background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+        color: var(--text-light);
+        text-align: center;
+        padding: 60px 20px;
+    }
+    
+    .cta-section h2 {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.2rem;
+        margin-bottom: 20px;
+    }
+    
+    .cta-button {
+        background-color: var(--accent-gold);
+        color: var(--text-dark);
+        padding: 15px 30px;
+        text-decoration: none;
+        font-weight: bold;
+        border-radius: 50px;
+        transition: transform 0.3s ease, background-color 0.3s ease;
+        display: inline-block;
+    }
+    
+    .cta-button:hover {
+        background-color: #fff;
+        transform: scale(1.05);
+    }
+
+    /* Footer */
+    footer {
+      background-color: #001f3f; /* Navy Blue */
+      color: var(--text-light);
+      text-align: center;
+      padding: 30px 20px;
+      font-size: 0.9rem;
+      margin-top: auto;
+    }
+    
+    /* Scroll Animations */
+    .reveal {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+    }
+    
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Responsive Design */
+    @media screen and (max-width: 768px) {
+      header { justify-content: center; }
+      .logo { margin-bottom: 10px; }
+      nav ul { flex-direction: column; align-items: center; gap: 10px; margin-top: 15px; width: 100%; }
+      .hero h1 { font-size: 2.8rem; }
+      .hero p { font-size: 1.1rem; }
+      .section-title { font-size: 2.2rem; }
+      .story-layout { grid-template-columns: 1fr; }
+      .story-layout:nth-child(even) .story-image { grid-row: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <img src="https://placehold.co/180x60/ffffff/0033a0?text=Jolly+Tailor" alt="Jolly Ladies Tailor Logo">
+    </div>
+    <nav>
+      <ul>
+        <li><a href="home.html">Home</a></li>
+        <li><a href="about.html" class="active">About</a></li>
+        <li><a href="services.html">Services</a></li>
+        <li><a href="gallery.html">Gallery</a></li>
+        <li><a href="order.html">order</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a href="login.html">Login</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+        <h1 class="reveal">Weaving Dreams into Dresses</h1>
+        <p class="reveal" style="transition-delay: 100ms;">Discover the story, passion, and craftsmanship behind every stitch.</p>
+    </section>
+
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title reveal">Our Journey</h2>
+            <div class="story-layout">
+                <div class="story-image reveal">
+                    <img src="https://placehold.co/600x450/f0f4ff/0033a0?text=Our+Beginning" alt="A sketch of a dress design on a notepad">
+                </div>
+                <div class="story-text reveal">
+                    <h3>2010: The First Stitch</h3>
+                    <p>Jolly Ladies Tailor began in a humble workshop, born from a pure passion for fabric and form. It started with a simple mission: to create beautiful, bespoke garments that made women feel extraordinary. Every piece was crafted with meticulous care, building a reputation one satisfied client at a time.</p>
+                </div>
+            </div>
+            <div class="story-layout">
+                <div class="story-text reveal">
+                    <h3>Today: A Legacy of Elegance</h3>
+                    <p>Now a trusted name in Kolkata, our passion remains the heart of our work. We've grown, but our core values haven't changed. We blend time-honored tailoring techniques with contemporary styles to bring our clients' unique fashion visions to life, creating not just clothes, but confidence.</p>
+                </div>
+                 <div class="story-image reveal">
+                    <img src="https://placehold.co/600x450/4169e1/ffffff?text=Our+Workshop+Today" alt="A modern, bright tailoring workshop with fabric rolls">
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <section class="section usp-section">
+      <div class="container">
+        <h2 class="section-title reveal">The Jolly Difference</h2>
+        <div class="usp-grid">
+          <div class="usp-card reveal">
+            <div class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.624L16.5 21.75l-.398-1.126a3.375 3.375 0 00-2.456-2.456L12.75 18l1.126-.398a3.375 3.375 0 002.456-2.456L16.5 14.25l.398 1.126a3.375 3.375 0 002.456 2.456L20.25 18l-1.126.398a3.375 3.375 0 00-2.456 2.456z" /></svg>
+            </div>
+            <h3>Master Artisans</h3>
+            <p>Our experienced tailors are true artists, blending traditional techniques with modern precision for a flawless finish.</p>
+          </div>
+          <div class="usp-card reveal" style="transition-delay: 100ms;">
+             <div class="icon">
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+            </div>
+            <h3>Premium Fabrics</h3>
+            <p>We source only high-quality materials, ensuring a luxurious feel and lasting durability in every single garment.</p>
+          </div>
+          <div class="usp-card reveal" style="transition-delay: 200ms;">
+             <div class="icon">
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg>
+            </div>
+            <h3>Bespoke To You</h3>
+            <p>We collaborate closely with you, listening to your ideas to create one-of-a-kind outfits that perfectly reflect your style.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="container reveal">
+            <h2>Ready to Create Your Masterpiece?</h2>
+            <p style="margin-bottom: 30px; opacity: 0.9;">Let's bring your vision to life. Explore our work or get in touch to start your journey.</p>
+            <a href="gallery.html" class="cta-button">View Our Gallery</a>
+        </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Jolly Ladies Tailor. Crafted with Love & Elegance in Kolkata.</p>
+  </footer>
+
+<script>
+    const revealElements = document.querySelectorAll('.reveal');
+
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+            }
+        });
+    }, {
+        threshold: 0.1
+    });
+
+    revealElements.forEach(el => {
+        revealObserver.observe(el);
+    });
+</script>
+
+</body>
+</html>
+

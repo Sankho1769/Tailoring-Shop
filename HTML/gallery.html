@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gallery - Jolly Ladies Tailor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-color: #0033a0; /* Royal Blue */
+      --secondary-color: #4169e1; /* Brighter Royal Blue */
+      --accent-gold: #f6d365;
+      --text-dark: #333;
+      --text-light: #fff;
+      --bg-light: #f8faff; /* Light blue tint */
+      --bg-section: #f0f4ff; /* Slightly darker blue tint */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: var(--bg-light);
+      color: var(--text-dark);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    header {
+      background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
+      color: var(--text-light);
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo img {
+      height: 60px;
+    }
+
+    nav ul {
+      list-style: none;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    nav ul li a {
+      color: var(--text-light);
+      text-decoration: none;
+      font-weight: bold;
+      padding: 6px 12px;
+      border-radius: 6px;
+      position: relative;
+      transition: color 0.3s ease;
+    }
+    
+    nav ul li a::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 2px;
+        background-color: var(--accent-gold);
+        transition: width 0.3s ease;
+    }
+
+    nav ul li a:hover::after, nav ul li a.active::after {
+      width: 100%;
+    }
+    
+    nav ul li a.active {
+      color: var(--accent-gold);
+    }
+    
+    main {
+        width: 100%;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 100px 20px 80px;
+      background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+      color: var(--text-light);
+    }
+
+    .hero h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 3.8rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+    }
+
+    .hero p {
+      font-size: 1.3rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.95);
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    
+    .section {
+        padding: 80px 0;
+    }
+    
+    .container {
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+    
+    .section-title {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.8rem;
+        text-align: center;
+        margin-bottom: 50px;
+        color: var(--primary-color);
+        position: relative;
+    }
+    
+    .section-title::after {
+        content: '';
+        display: block;
+        width: 60px;
+        height: 3px;
+        background-color: var(--secondary-color);
+        margin: 10px auto 0;
+        border-radius: 2px;
+    }
+
+    /* Gallery Filters */
+    .gallery-filters {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .filter-btn {
+      background-color: transparent;
+      border: 2px solid var(--secondary-color);
+      color: var(--secondary-color);
+      padding: 10px 20px;
+      border-radius: 50px;
+      margin: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s ease;
+    }
+
+    .filter-btn:hover, .filter-btn.active {
+      background-color: var(--secondary-color);
+      color: var(--text-light);
+    }
+
+    /* Gallery Grid */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .gallery-item {
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      height: 400px; /* Added fixed height */
+    }
+
+    .gallery-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.4s ease;
+    }
+
+    .gallery-item:hover img {
+      transform: scale(1.1);
+    }
+
+    .gallery-item .overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0, 51, 160, 0.8), transparent);
+      color: white;
+      padding: 40px 20px 20px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    
+    .gallery-item:hover .overlay {
+        opacity: 1;
+    }
+
+    .gallery-item h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+      transform: translateY(10px);
+      transition: transform 0.4s ease;
+    }
+
+    .gallery-item:hover h3 {
+        transform: translateY(0);
+    }
+    
+    /* Lightbox Modal */
+    .lightbox {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.85);
+        z-index: 1000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    
+    .lightbox.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .lightbox-content {
+        max-width: 90%;
+        max-height: 85%;
+    }
+
+    .lightbox-content img {
+        width: auto;
+        height: auto;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    
+    .lightbox-close {
+        position: absolute;
+        top: 20px;
+        right: 30px;
+        font-size: 3rem;
+        color: white;
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    /* CTA Section */
+    .cta-section {
+        background: var(--primary-color);
+        text-align: center;
+        padding: 60px 20px;
+    }
+    
+    .cta-section h2 {
+        font-family: 'Playfair Display', serif;
+        font-size: 2.2rem;
+        margin-bottom: 20px;
+        color: var(--text-light);
+    }
+    
+    .cta-button {
+        background-color: var(--accent-gold);
+        color: var(--text-dark);
+        padding: 15px 30px;
+        text-decoration: none;
+        font-weight: bold;
+        border-radius: 50px;
+        transition: transform 0.3s ease, background-color 0.3s ease;
+        display: inline-block;
+    }
+    
+    .cta-button:hover {
+        background-color: #fff;
+        transform: scale(1.05);
+    }
+
+    /* Footer */
+    footer {
+      background-color: #001f3f; /* Navy Blue */
+      color: var(--text-light);
+      text-align: center;
+      padding: 30px 20px;
+      font-size: 0.9rem;
+      margin-top: auto;
+    }
+    
+    /* Scroll Animations */
+    .reveal {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+    }
+    
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Responsive Design */
+    @media screen and (max-width: 768px) {
+      header { justify-content: center; }
+      .logo { margin-bottom: 10px; }
+      nav ul { flex-direction: column; align-items: center; gap: 10px; margin-top: 15px; width: 100%; }
+      .hero h1 { font-size: 2.8rem; }
+      .hero p { font-size: 1.1rem; }
+      .section-title { font-size: 2.2rem; }
+      .gallery-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <img src="./../image/Shop_logo.png" alt="Jolly Ladies Tailor Logo">
+    </div>
+    <nav>
+      <ul>
+        <li><a href="home.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
+        <li><a href="services.html">Services</a></li>
+        <li><a href="gallery.html" class="active">Gallery</a></li>
+        <li><a href="order.html">order</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a href="login.html">Login</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+        <h1 class="reveal">A Showcase of Our Craft</h1>
+        <p class="reveal" style="transition-delay: 100ms;">Explore our portfolio of bespoke creations, from timeless traditional wear to modern, chic designs.</p>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="gallery-filters reveal">
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="bridal">Bridal Wear</button>
+          <button class="filter-btn" data-filter="traditional">Traditional</button>
+          <button class="filter-btn" data-filter="party">Party Wear</button>
+          <button class="filter-btn" data-filter="kids">Kids</button>
+        </div>
+
+        <div class="gallery-grid reveal">
+            <div class="gallery-item" data-category="bridal">
+                <img src="./../image/Weading.avif" alt="Wedding Outfit Creations">
+                <div class="overlay"><h3>Wedding Outfit Creations</h3></div>
+            </div>
+            <div class="gallery-item" data-category="traditional">
+                <img src="./../image/telengana.jpeg" alt="Elegant Telengana Style">
+                <div class="overlay"><h3>Elegant Telengana Style</h3></div>
+            </div>
+             <div class="gallery-item" data-category="traditional">
+                <img src="./../image/tamil.webp" alt="Traditional Tamil Dresses">
+                <div class="overlay"><h3>Traditional Tamil Dresses</h3></div>
+            </div>
+            <div class="gallery-item" data-category="traditional">
+                <img src="./../image/Maharastra.jpg" alt="Maharashtrian Sarees">
+                <div class="overlay"><h3>Maharashtrian Sarees</h3></div>
+            </div>
+            <div class="gallery-item" data-category="traditional">
+                <img src="./../image/kashmiri-dress.webp" alt="Kashmiri Winter Wear">
+                <div class="overlay"><h3>Kashmiri Winter Wear</h3></div>
+            </div>
+            <div class="gallery-item" data-category="traditional">
+                <img src="./../image/Assam.jpg" alt="Assamese Silk & Charm">
+                <div class="overlay"><h3>Assamese Silk & Charm</h3></div>
+            </div>
+            <div class="gallery-item" data-category="party">
+                <img src="./../image/Party.webp" alt="Party Wear Collections">
+                <div class="overlay"><h3>Party Wear Collections</h3></div>
+            </div>
+            <div class="gallery-item" data-category="party">
+                <img src="./../image/birthday.webp" alt="Birthday Special Dresses">
+                <div class="overlay"><h3>Birthday Special Dresses</h3></div>
+            </div>
+            <div class="gallery-item" data-category="kids">
+                <img src="./../image/Child.avif" alt="Adorable Kids Outfits">
+                <div class="overlay"><h3>Adorable Kids Outfits</h3></div>
+            </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="container reveal">
+            <h2>Inspired by Our Work?</h2>
+            <p style="margin-bottom: 30px; opacity: 0.9;">Let's create something beautiful together. Contact us for a consultation.</p>
+            <a href="contact.html" class="cta-button">Get in Touch</a>
+        </div>
+    </section>
+
+  </main>
+  
+  <div class="lightbox" id="lightbox">
+      <span class="lightbox-close" id="lightbox-close">&times;</span>
+      <div class="lightbox-content">
+          <img src="" alt="Enlarged gallery image" id="lightbox-img">
+      </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2025 Jolly Ladies Tailor. Crafted with Love & Elegance in Kolkata.</p>
+  </footer>
+
+<script>
+    // Scroll Reveal Animation
+    const revealElements = document.querySelectorAll('.reveal');
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+            }
+        });
+    }, {
+        threshold: 0.1
+    });
+    revealElements.forEach(el => {
+        revealObserver.observe(el);
+    });
+
+    // Gallery Filtering
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    const galleryItems = document.querySelectorAll('.gallery-item');
+
+    filterButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            filterButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+
+            const filter = button.getAttribute('data-filter');
+
+            galleryItems.forEach(item => {
+                item.style.display = 'none';
+                if (filter === 'all' || item.getAttribute('data-category') === filter) {
+                    item.style.display = 'block';
+                }
+            });
+        });
+    });
+
+    // Lightbox Functionality
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    const lightboxClose = document.getElementById('lightbox-close');
+
+    galleryItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const imgSrc = item.querySelector('img').src;
+            const imgAlt = item.querySelector('img').alt;
+            lightboxImg.src = imgSrc;
+            lightboxImg.alt = imgAlt;
+            lightbox.classList.add('show');
+        });
+    });
+
+    const closeLightbox = () => {
+        lightbox.classList.remove('show');
+    };
+
+    lightboxClose.addEventListener('click', closeLightbox);
+    lightbox.addEventListener('click', (e) => {
+        if (e.target === lightbox) {
+            closeLightbox();
+        }
+    });
+
+</script>
+
+</body>
+</html>
+

@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dress Shop</title>
+  <style>
+    /* Your existing CSS (unchanged) */
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+    }
+    header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 97%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 40px;
+      background: rgba(0, 47, 108, 0.95);
+      color: white;
+      z-index: 2;
+    }
+    .logo img {
+      height: 80px;
+      margin-top: -20px;
+      margin-bottom: -23px;
+    }
+    nav ul {
+      list-style: none;
+      display: flex;
+      gap: 20px;
+      padding: 0;
+      margin: 0;
+    }
+    nav ul li a {
+      color: white;
+      text-decoration: none;
+      font-weight: bold;
+      padding: 10px;
+      transition: color 0.3s ease, background 0.3s ease;
+    }
+    nav ul li a:hover {
+      color: #ffcc00;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 5px;
+    }
+    .container {
+      display: flex;
+      padding-top: 120px;
+    }
+    .sidebar {
+      width: 250px;
+      background: #ddd;
+      padding: 20px;
+    }
+    .main-content {
+      flex: 1;
+      padding: 40px;
+    }
+    .section {
+      margin-bottom: 40px;
+    }
+    .products {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .product {
+      width: 150px;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: center;
+      border-radius: 6px;
+    }
+    .product img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+    }
+    .product button {
+      margin-top: 8px;
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .cart-toggle {
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      cursor: pointer;
+      border-radius: 6px;
+      z-index: 1000;
+    }
+    .cart-panel {
+      position: fixed;
+      top: 0;
+      right: -400px;
+      width: 350px;
+      height: 100%;
+      background: white;
+      box-shadow: -4px 0 8px rgba(0,0,0,0.2);
+      padding: 20px;
+      transition: right 0.3s ease-in-out;
+      z-index: 999;
+      overflow-y: auto;
+    }
+    .cart-panel.open {
+      right: 0;
+    }
+    .cart-header {
+      font-weight: bold;
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    .cart-item {
+      margin-bottom: 15px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+    }
+    .cart-item h4 {
+      margin: 0;
+    }
+    .cart-item p {
+      margin: 5px 0;
+    }
+    .qty-controls button {
+      padding: 2px 6px;
+      margin: 0 3px;
+      cursor: pointer;
+    }
+    .remove-btn {
+      color: red;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .cart-footer {
+      border-top: 1px solid #ccc;
+      padding-top: 15px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .popup {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      background: green;
+      color: white;
+      padding: 12px 25px;
+      border-radius: 10px;
+      transition: transform 0.3s;
+      z-index: 2000;
+    }
+    .popup.show {
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .checkout-btn {
+      background-color: #28a745;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 20px;
+      width: 100%;
+    }
+    .checkout-btn:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    .filter-input {
+      width: 100%;
+      padding: 6px;
+      margin-top: 5px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+        <img src="./../image/Shop_logo.png" alt="Jolly Ladies Tailor Logo">
+    </div> 
+    <nav>
+        <ul>
+            <li><a href="home.html">Home</a></li>
+            <li><a href="about.html">About</a></li>
+            <li><a href="services.html">Services</a></li>
+            <li><a href="gallery.html">Gallery</a></li>
+            <li><a href="testimonials.html">Testimonials</a></li>
+            <li><a href="contact.html">Contact</a></li>
+            <li><a href="login.html">Login</a></li>
+        </ul>
+    </nav>
+  </header>
+
+  <button class="cart-toggle" id="cartToggle">🛒 Cart (<span id="cartQty">0</span>)</button>
+
+  <div class="cart-panel" id="cartPanel">
+    <div class="cart-header">Your Cart</div>
+    <div id="cartItems"></div>
+    <div class="cart-footer">
+      <div><strong>Subtotal:</strong> ₹<span id="subtotalPrice">0</span></div>
+      <div><strong>Tax (10%):</strong> ₹<span id="taxAmount">0</span></div>
+      <div><strong>Total:</strong> ₹<span id="totalPrice">0</span></div>
+      <button class="checkout-btn" id="checkoutBtn" disabled>Checkout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="sidebar">
+      <h3>Filters</h3>
+      <strong>Search:</strong><br>
+      <input type="text" id="searchInput" class="filter-input" placeholder="Search by name">
+
+      <strong>Price Range:</strong><br>
+      <input type="number" id="minPrice" class="filter-input" placeholder="Min Price">
+      <input type="number" id="maxPrice" class="filter-input" placeholder="Max Price">
+
+      <strong>Category:</strong><br>
+      <label><input type="checkbox" class="filter" value="casual"> Casual</label><br>
+      <label><input type="checkbox" class="filter" value="party"> Party</label><br>
+      <label><input type="checkbox" class="filter" value="ethnic"> Ethnic</label><br>
+      <label><input type="checkbox" class="filter" value="office"> Office</label>
+    </div>
+
+    <div class="main-content">
+      <h1>Dress Shop</h1>
+      <div id="product-sections"></div>
+    </div>
+  </div>
+
+  <div id="popup" class="popup">Added to Cart!</div>
+
+  <script>
+    const namePools = {
+      Tradition: ["Saree", "Kurti", "Salwar Suit", "Dupatta Set", "Anarkali", "Churidar", "Patiala", "Lehenga Choli", "Ethnic Gown", "Traditional Skirt", "Ghagra", "Embroidered Kurti"],
+      Wedding: ["Bridal Lehenga", "Heavy Saree", "Silk Kurti", "Reception Gown", "Designer Suit", "Wedding Gown", "Sharara Set", "Velvet Lehenga", "Zari Work Dress", "Embellished Anarkali", "Banarasi Saree", "Bride Special Kurti"],
+      Child: ["Kids Frock", "Mini Dress", "Kids Ethnic Wear", "Party Frock", "Tiny Suit", "Cartoon Dress", "Fairy Frock", "Kid's Lehenga", "Floral Dress", "Striped Set", "Printed Gown", "Cotton Frock"],
+      Party: ["Party Dress", "Evening Gown", "Mini Dress", "Shimmer Gown", "Velvet Dress", "Sequin Top", "Cocktail Gown", "Satin Dress", "Off Shoulder", "Fashion Gown", "Ruffle Dress", "Net Dress"],
+      Formal: ["Office Kurti", "Formal Suit", "Blazer Set", "Workwear Dress", "Plain Kurti", "Pinstripe Suit", "Formal Top", "Tunic", "Neutral Kurti", "Office Gown", "Collared Dress", "Work Set"]
+    };
+
+    const products = [
+  // Tradition
+  { category: "Saree", price: 999, img: "./../image/assam.jpg" },
+  { category: "Kurti", price: 1299, img: "./../image/kurti-300x300.jpeg" },
+  { category: "Salwar Suit", price: 1499, img: "./../image/Suit-salwar.jpeg" },
+  { category: "Dupatta Set", price: 1999, img: "./../image/saree.jpg" },
+  { category: "Anarkali", price: 899, img: "./../image/kurti.jpg" },
+  { category: "Churidar", price: 1799, img: "./../image/salwar.jpg" },
+  { category: "Patiala", price: 999, img: "./../image/default.jpg" },
+  { category: "Lehenga Choli", price: 1299, img: "./../image/default.jpg" },
+  { category: "Ethnic Gown", price: 1599, img: "./../image/default.jpg" },
+  { category: "Traditional Skirt", price: 1899, img: "./../image/default.jpg" },
+  { category: "Ghagra", price: 1499, img: "./../image/default.jpg" },
+  { category: "Embroidered Kurti", price: 1299, img: "./../image/default.jpg" },
+
+  // Wedding
+  { category: "Bridal Lehenga", price: 1799, img: "./../image/lahenga.webp" },
+  { category: "Heavy Saree", price: 899, img: "./../image/default.jpg" },
+  { category: "Silk Kurti", price: 2499, img: "./../image/default.jpg" },
+  { category: "Reception Gown", price: 1099, img: "./../image/default.jpg" },
+  { category: "Designer Suit", price: 2199, img: "./../image/default.jpg" },
+  { category: "Wedding Gown", price: 1599, img: "./../image/default.jpg" },
+  { category: "Sharara Set", price: 1399, img: "./../image/default.jpg" },
+  { category: "Velvet Lehenga", price: 2699, img: "./../image/default.jpg" },
+  { category: "Zari Work Dress", price: 1799, img: "./../image/default.jpg" },
+  { category: "Embellished Anarkali", price: 1899, img: "./../image/default.jpg" },
+  { category: "Banarasi Saree", price: 1999, img: "./../image/default.jpg" },
+  { category: "Bride Special Kurti", price: 799, img: "./../image/default.jpg" },
+
+  // Child
+  { category: "Kids Frock", price: 599, img: "./../image/default.jpg" },
+  { category: "Mini Dress", price: 699, img: "./../image/default.jpg" },
+  { category: "Kids Ethnic Wear", price: 899, img: "./../image/default.jpg" },
+  { category: "Party Frock", price: 799, img: "./../image/default.jpg" },
+  { category: "Tiny Suit", price: 699, img: "./../image/default.jpg" },
+  { category: "Cartoon Dress", price: 599, img: "./../image/default.jpg" },
+  { category: "Fairy Frock", price: 899, img: "./../image/default.jpg" },
+  { category: "Kid's Lehenga", price: 999, img: "./../image/default.jpg" },
+  { category: "Floral Dress", price: 749, img: "./../image/default.jpg" },
+  { category: "Striped Set", price: 699, img: "./../image/default.jpg" },
+  { category: "Printed Gown", price: 899, img: "./../image/default.jpg" },
+  { category: "Cotton Frock", price: 649, img: "./../image/default.jpg" },
+
+  // Party
+  { category: "Party Dress", price: 1199, img: "./../image/default.jpg" },
+  { category: "Evening Gown", price: 1599, img: "./../image/default.jpg" },
+  { category: "Mini Dress", price: 1099, img: "./../image/default.jpg" },
+  { category: "Shimmer Gown", price: 1499, img: "./../image/default.jpg" },
+  { category: "Velvet Dress", price: 1399, img: "./../image/default.jpg" },
+  { category: "Sequin Top", price: 999, img: "./../image/default.jpg" },
+  { category: "Cocktail Gown", price: 1899, img: "./../image/default.jpg" },
+  { category: "Satin Dress", price: 1399, img: "./../image/default.jpg" },
+  { category: "Off Shoulder", price: 1299, img: "./../image/default.jpg" },
+  { category: "Fashion Gown", price: 1699, img: "./../image/default.jpg" },
+  { category: "Ruffle Dress", price: 999, img: "./../image/default.jpg" },
+  { category: "Net Dress", price: 1199, img: "./../image/default.jpg" },
+
+  // Formal
+  { category: "Office Kurti", price: 999, img: "./../image/default.jpg" },
+  { category: "Formal Suit", price: 1499, img: "./../image/default.jpg" },
+  { category: "Blazer Set", price: 1999, img: "./../image/default.jpg" },
+  { category: "Workwear Dress", price: 1399, img: "./../image/default.jpg" },
+  { category: "Plain Kurti", price: 899, img: "./../image/default.jpg" },
+  { category: "Pinstripe Suit", price: 1899, img: "./../image/default.jpg" },
+  { category: "Formal Top", price: 799, img: "./../image/default.jpg" },
+  { category: "Tunic", price: 699, img: "./../image/default.jpg" },
+  { category: "Neutral Kurti", price: 999, img: "./../image/default.jpg" },
+  { category: "Office Gown", price: 1199, img: "./../image/default.jpg" },
+  { category: "Collared Dress", price: 1099, img: "./../image/default.jpg" },
+  { category: "Work Set", price: 1699, img: "./../image/default.jpg" }
+];
+
+    let cart = {};
+
+    function generateSections() {
+      const sectionNames = Object.keys(namePools);
+      const container = document.getElementById('product-sections');
+      container.innerHTML = '';
+
+      sectionNames.forEach(sectionName => {
+        const section = document.createElement('div');
+        section.classList.add('section');
+        section.innerHTML = `<h2>${sectionName}</h2><div class="products"></div>`;
+        const productGrid = section.querySelector('.products');
+
+        const nameList = namePools[sectionName];
+
+        for (let j = 0; j < 12; j++) {
+          const p = products[j % products.length];
+          const productName = nameList[j % nameList.length];
+          const productDiv = document.createElement('div');
+          productDiv.className = `product ${p.category}`;
+          productDiv.setAttribute('data-name', productName.toLowerCase());
+          productDiv.setAttribute('data-price', p.price);
+          productDiv.innerHTML = `
+            <img src="${p.img}" alt="${productName}">
+            <h4>${productName}</h4>
+            <p>₹${p.price}</p>
+            <button onclick="addToCart('${productName}', ${p.price})">Add to Cart</button>
+          `;
+          productGrid.appendChild(productDiv);
+        }
+
+        container.appendChild(section);
+      });
+    }
+
+    function addToCart(name, price) {
+      if (!cart[name]) {
+        cart[name] = { price, quantity: 1 };
+      } else {
+        cart[name].quantity += 1;
+      }
+      updateCart();
+      showPopup("Added to Cart!");
+    }
+
+    function updateCart() {
+      const cartItems = document.getElementById('cartItems');
+      cartItems.innerHTML = '';
+      let totalQty = 0;
+      let subtotal = 0;
+
+      for (let item in cart) {
+        const { price, quantity } = cart[item];
+        totalQty += quantity;
+        subtotal += price * quantity;
+
+        const div = document.createElement('div');
+        div.className = 'cart-item';
+        div.innerHTML = `
+          <h4>${item}</h4>
+          <p>₹${price} x ${quantity}</p>
+          <div class="qty-controls">
+            <button onclick="changeQty('${item}', -1)">-</button>
+            <button onclick="changeQty('${item}', 1)">+</button>
+            <span class="remove-btn" onclick="removeItem('${item}')">Remove</span>
+          </div>
+        `;
+        cartItems.appendChild(div);
+      }
+
+      const taxAmount = (subtotal * 0.10).toFixed(2);
+      const totalPrice = (subtotal + parseFloat(taxAmount)).toFixed(2);
+
+      document.getElementById('cartQty').innerText = totalQty;
+      document.getElementById('subtotalPrice').innerText = subtotal;
+      document.getElementById('taxAmount').innerText = taxAmount;
+      document.getElementById('totalPrice').innerText = totalPrice;
+
+      document.getElementById('checkoutBtn').disabled = totalQty === 0;
+    }
+
+    function changeQty(name, delta) {
+      if (cart[name]) {
+        cart[name].quantity += delta;
+        if (cart[name].quantity <= 0) {
+          delete cart[name];
+        }
+        updateCart();
+      }
+    }
+
+    function removeItem(name) {
+      delete cart[name];
+      updateCart();
+    }
+
+    function showPopup(msg) {
+      const popup = document.getElementById('popup');
+      popup.innerText = msg;
+      popup.classList.add('show');
+      setTimeout(() => popup.classList.remove('show'), 2000);
+    }
+
+    document.getElementById('cartToggle').addEventListener('click', () => {
+      document.getElementById('cartPanel').classList.toggle('open');
+    });
+
+    document.getElementById('checkoutBtn').addEventListener('click', () => {
+      if (Object.keys(cart).length === 0) {
+        showPopup("Your cart is empty. Add items to place an order.");
+      } else {
+        cart = {};
+        updateCart();
+        showPopup("Order Placed Successfully!");
+        document.getElementById('cartPanel').classList.remove('open');
+      }
+    });
+
+    generateSections();
+
+    const filters = document.querySelectorAll('.filter');
+    const searchInput = document.getElementById('searchInput');
+    const minPrice = document.getElementById('minPrice');
+    const maxPrice = document.getElementById('maxPrice');
+
+    filters.forEach(f => f.addEventListener('change', applyFilters));
+    searchInput.addEventListener('input', applyFilters);
+    minPrice.addEventListener('input', applyFilters);
+    maxPrice.addEventListener('input', applyFilters);
+
+    function applyFilters() {
+      const activeCategories = Array.from(filters).filter(f => f.checked).map(f => f.value);
+      const searchQuery = searchInput.value.toLowerCase();
+      const min = parseFloat(minPrice.value) || 0;
+      const max = parseFloat(maxPrice.value) || Infinity;
+
+      const allProducts = document.querySelectorAll('.product');
+
+      allProducts.forEach(p => {
+        const name = p.getAttribute('data-name');
+        const price = parseFloat(p.getAttribute('data-price'));
+        const category = Array.from(p.classList).find(c => ['casual', 'party', 'ethnic', 'office'].includes(c));
+
+        const categoryMatch = activeCategories.length === 0 || activeCategories.includes(category);
+        const searchMatch = name.includes(searchQuery);
+        const priceMatch = price >= min && price <= max;
+
+        if (categoryMatch && searchMatch && priceMatch) {
+          p.style.display = 'block';
+        } else {
+          p.style.display = 'none';
+        }
+      });
+    }
+  </script>
+
+</body>
+</html>
