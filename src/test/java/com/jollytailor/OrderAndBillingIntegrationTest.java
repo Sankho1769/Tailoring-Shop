@@ -233,6 +233,7 @@ class OrderAndBillingIntegrationTest {
                 .andExpect(jsonPath("$.order_number", startsWith("JLT-")))
                 .andExpect(jsonPath("$.customer_name", is("Ananya Roy")))
                 .andExpect(jsonPath("$.customer_phone_masked", startsWith("XXXXXX")))
+                .andExpect(jsonPath("$.customer_phone").doesNotExist())
                 .andExpect(jsonPath("$.total", is(950.0)))
                 .andExpect(jsonPath("$.items[0].item_name", is("Heavy Embroidery Blouse")))
                 .andExpect(jsonPath("$.shop.name").isNotEmpty());
@@ -250,5 +251,81 @@ class OrderAndBillingIntegrationTest {
                 .andExpect(jsonPath("$.gpay_qr_key").doesNotExist())
                 .andExpect(jsonPath("$.upi_id").doesNotExist())
                 .andExpect(jsonPath("$.shop_name").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("Inventory Stock: Atomic deduction, insufficient stock rejection, and restock on cancellation")
+    @WithMockUser(username = "admin_user", roles = {"ADMIN"})
+    void testInventoryStockProtection() throws Exception {
+        // 1. Admin creates ready-made product with stock 5
+        String prodRes = mockMvc.perform(post("/api/admin/products")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Silk Saree with Blouse Piece",
+                                "defaultRate", 1200.00,
+                                "productType", "READY_MADE",
+                                "stockQuantity", 5
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String prodId = (String) mapper.readValue(prodRes, Map.class).get("id");
+
+        // 2. Create customer
+        String custRes = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Tanushree Das", "phone", "9832233445"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String custId = (String) mapper.readValue(custRes, Map.class).get("id");
+
+        // 3. Purchase 2 units
+        String orderRes = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", custId,
+                                "items", List.of(Map.of(
+                                        "productId", prodId,
+                                        "name", "Silk Saree with Blouse Piece",
+                                        "quantity", 2,
+                                        "rate", 1200.00
+                                ))
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String orderId = (String) mapper.readValue(orderRes, Map.class).get("id");
+
+        // 4. Verify stock is now 3 (5 - 2)
+        mockMvc.perform(get("/api/admin/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '" + prodId + "')].stock_quantity").value(3));
+
+        // 5. Try purchasing 4 units (more than 3 available) -> should fail with 400 Bad Request
+        mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", custId,
+                                "items", List.of(Map.of(
+                                        "productId", prodId,
+                                        "name", "Silk Saree with Blouse Piece",
+                                        "quantity", 4,
+                                        "rate", 1200.00
+                                ))
+                        ))))
+                .andExpect(status().isBadRequest());
+
+        // 6. Cancel the order -> should restock 2 units back to 5
+        mockMvc.perform(patch("/api/tailor/orders/" + orderId + "/status")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("status", "CANCELLED"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '" + prodId + "')].stock_quantity").value(5));
     }
 }

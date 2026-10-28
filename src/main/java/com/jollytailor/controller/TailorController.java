@@ -266,10 +266,30 @@ public class TailorController {
             if (!productIdStr.isBlank()) {
                 try {
                     prodId = UUID.fromString(productIdStr);
-                    var pRows = jdbc.queryForList("SELECT default_rate FROM products WHERE id=?", prodId);
-                    if (!pRows.isEmpty() && pRows.get(0).get("default_rate") != null) {
-                        defaultRate = (BigDecimal) pRows.get(0).get("default_rate");
+                    var pRows = jdbc.queryForList("SELECT id, name, default_rate, product_type, stock_quantity FROM products WHERE id=? FOR UPDATE", prodId);
+                    if (!pRows.isEmpty()) {
+                        var pRow = pRows.get(0);
+                        if (pRow.get("default_rate") != null) {
+                            defaultRate = (BigDecimal) pRow.get("default_rate");
+                        }
+                        String pType = String.valueOf(pRow.get("product_type"));
+                        if ("READY_MADE".equalsIgnoreCase(pType)) {
+                            int available = pRow.get("stock_quantity") == null ? 0 : ((Number) pRow.get("stock_quantity")).intValue();
+                            if (available < qty) {
+                                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                        "Insufficient inventory stock for " + name + ". Available: " + available + ", requested: " + qty);
+                            }
+                            int decremented = jdbc.update(
+                                    "UPDATE products SET stock_quantity = stock_quantity - ?, updated_at=NOW() WHERE id=? AND stock_quantity >= ?",
+                                    qty, prodId, qty);
+                            if (decremented == 0) {
+                                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                        "Stock unavailable for " + name + " due to concurrent checkout. Please retry.");
+                            }
+                        }
                     }
+                } catch (ResponseStatusException rse) {
+                    throw rse;
                 } catch (Exception ignored) {}
             }
 
@@ -352,6 +372,7 @@ public class TailorController {
     }
 
     @PatchMapping("/orders/{id}/status")
+    @Transactional
     public Map<String,Object> updateStatus(@PathVariable UUID id, @RequestBody Map<String,Object> b) {
         String raw = text(b, "status").toUpperCase().replace(" ", "_");
         String canonical = switch (raw) {
@@ -365,10 +386,32 @@ public class TailorController {
                     "Invalid order status. Allowed: New, In Progress, Trial, Ready, Delivered, Cancelled");
         };
 
+        Map<String,Object> currentOrd;
+        try {
+            currentOrd = jdbc.queryForMap("SELECT status FROM tailoring_orders WHERE id=? FOR UPDATE", id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found");
+        }
+        String oldStatus = String.valueOf(currentOrd.get("status"));
+
         int n = jdbc.update("UPDATE tailoring_orders SET status=?, updated_at=NOW() WHERE id=?", canonical, id);
         if (n == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found");
         }
+
+        // Restock inventory if cancelling previously active order
+        if ("CANCELLED".equals(canonical) && !"CANCELLED".equals(oldStatus)) {
+            List<Map<String,Object>> items = jdbc.queryForList(
+                    "SELECT product_id, quantity FROM order_items WHERE order_id=?", id);
+            for (Map<String,Object> it : items) {
+                Object pId = it.get("product_id");
+                if (pId != null) {
+                    int q = ((Number) it.get("quantity")).intValue();
+                    jdbc.update("UPDATE products SET stock_quantity = stock_quantity + ?, updated_at=NOW() WHERE id=? AND product_type='READY_MADE'", q, pId);
+                }
+            }
+        }
+
         return Map.of("id", id, "status", canonical);
     }
 

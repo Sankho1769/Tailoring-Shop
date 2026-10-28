@@ -92,6 +92,7 @@ public class PublicController {
                 ? "XXXXXX" + rawPhone.substring(rawPhone.length() - 4)
                 : rawPhone;
         ord.put("customer_phone_masked", maskedPhone);
+        ord.remove("customer_phone");
 
         // Safe customer line items (excludes internal notes or staff adjustment reasons)
         ord.put("items", jdbc.queryForList(
