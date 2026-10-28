@@ -129,4 +129,126 @@ class OrderAndBillingIntegrationTest {
                 .andExpect(jsonPath("$.paymentStatus", is("PARTIALLY_PAID")))
                 .andExpect(jsonPath("$.newAmountPaid", is(650.0)));
     }
+
+    @Test
+    @DisplayName("Admin Pricing, Tailor Override Audit, Historical Immutability & Tailor Payment QR")
+    @WithMockUser(username = "admin_user", roles = {"ADMIN"})
+    void testAdminPricingAndTailorOverrides() throws Exception {
+        // 1. Admin creates a service with default rate 800.00
+        String prodRes = mockMvc.perform(post("/api/admin/products")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Heavy Embroidery Blouse",
+                                "defaultRate", 800.00,
+                                "productType", "SERVICE",
+                                "description", "Hand zardozi work"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.defaultRate", is(800.0)))
+                .andExpect(jsonPath("$.productType", is("SERVICE")))
+                .andReturn().getResponse().getContentAsString();
+        String productId = (String) mapper.readValue(prodRes, Map.class).get("id");
+
+        // 2. Also create a ready-made stock item
+        mockMvc.perform(post("/api/admin/products")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Readymade Cotton Kurti - M",
+                                "defaultRate", 450.00,
+                                "productType", "READY_MADE",
+                                "stockQuantity", 12
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.productType", is("READY_MADE")))
+                .andExpect(jsonPath("$.stockQuantity", is(12)));
+
+        // 3. Tailor creates customer and order overriding default rate (800 -> 950 with custom latkan reason)
+        String custRes = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Ananya Roy", "phone", "9830099887"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(custRes, Map.class).get("id");
+
+        String orderRes = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", customerId,
+                                "items", List.of(Map.of(
+                                        "productId", productId,
+                                        "name", "Heavy Embroidery Blouse",
+                                        "quantity", 1,
+                                        "defaultRate", 800.00,
+                                        "rate", 950.00,
+                                        "adjustmentReason", "Customer requested heavy handmade silk latkan"
+                                ))
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.total", is(950.0)))
+                .andExpect(jsonPath("$.items[0].default_rate", is(800.0)))
+                .andExpect(jsonPath("$.items[0].unit_rate", is(950.0)))
+                .andExpect(jsonPath("$.items[0].adjustment_reason", containsString("latkan")))
+                .andReturn().getResponse().getContentAsString();
+        String orderId = (String) mapper.readValue(orderRes, Map.class).get("id");
+
+        // 4. Admin inspects price adjustments audit endpoint
+        mockMvc.perform(get("/api/admin/price-adjustments"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$[0].item_name", is("Heavy Embroidery Blouse")))
+                .andExpect(jsonPath("$[0].default_rate", is(800.0)))
+                .andExpect(jsonPath("$[0].unit_rate", is(950.0)))
+                .andExpect(jsonPath("$[0].difference", is(150.0)))
+                .andExpect(jsonPath("$[0].adjustment_reason", containsString("latkan")));
+
+        // 5. Admin updates the global default rate of the product to 1000.00
+        mockMvc.perform(patch("/api/admin/products/" + productId)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("defaultRate", 1000.00))))
+                .andExpect(status().isOk());
+
+        // 6. Verify historical immutability: previously generated bill still has 950.00 total and 800.00 default
+        mockMvc.perform(get("/api/tailor/orders/" + orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total", is(950.0)))
+                .andExpect(jsonPath("$.items[0].unit_rate", is(950.0)))
+                .andExpect(jsonPath("$.items[0].default_rate", is(800.0)));
+
+        // 7. Verify Tailor Workspace GPay QR endpoint
+        mockMvc.perform(get("/api/tailor/payment-qr"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shopName").isNotEmpty())
+                .andExpect(jsonPath("$.upiId").isNotEmpty())
+                .andExpect(jsonPath("$.adminNotificationPhone").isNotEmpty());
+
+        // 8. Verify public customer e-bill endpoint
+        mockMvc.perform(get("/api/public/bills/" + orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.order_number", startsWith("JLT-")))
+                .andExpect(jsonPath("$.customer_name", is("Ananya Roy")))
+                .andExpect(jsonPath("$.customer_phone_masked", startsWith("XXXXXX")))
+                .andExpect(jsonPath("$.total", is(950.0)))
+                .andExpect(jsonPath("$.items[0].item_name", is("Heavy Embroidery Blouse")))
+                .andExpect(jsonPath("$.shop.name").isNotEmpty());
+
+        // Verify phone verification on public e-bill
+        mockMvc.perform(get("/api/public/bills/" + orderId + "?phone=9830099887"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/public/bills/" + orderId + "?phone=1111111111"))
+                .andExpect(status().isForbidden());
+
+        // 9. Verify public /api/public/shop does NOT expose internal payment QR or UPI ID as checkout feature
+        mockMvc.perform(get("/api/public/shop"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gpay_qr_key").doesNotExist())
+                .andExpect(jsonPath("$.upi_id").doesNotExist())
+                .andExpect(jsonPath("$.shop_name").isNotEmpty());
+    }
 }

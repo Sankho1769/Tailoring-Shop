@@ -21,7 +21,7 @@
   <nav class="navlinks">
     <a href="#services">Services</a>
     <a href="#styles">Style Inspirations</a>
-    <a href="#location">Shop & Payment</a>
+    <a href="#location">Shop & Visit</a>
     <a href="#appointment" class="orange">Book a Visit</a>
     <a href="/tailor.html">Tailor Login</a>
     <a href="/admin.html">Admin</a>
@@ -142,7 +142,7 @@
     </div>
   </section>
 
-  <!-- Shop Location, Contact & GPay QR Section -->
+  <!-- Shop Location & Contact Section -->
   <section class="section" id="location">
     <div class="panel layout">
       <div>
@@ -154,20 +154,19 @@
         <div style="margin:16px 0;line-height:2">
           <p>📞 <strong>Phone:</strong> <a id="publicShopPhone" href="#" style="color:var(--violet);font-weight:700">Connecting...</a></p>
           <p>💬 <strong>WhatsApp:</strong> <a id="publicShopWhatsApp" href="#" target="_blank" rel="noopener" style="color:var(--green);font-weight:700">Chat with Tailor on WhatsApp</a></p>
-          <p id="publicUpi" class="muted" style="font-size:14px"></p>
         </div>
         <div class="notice" style="background:#fcf2fa;color:var(--violet)">
           📍 <strong>Walk-in & Trial Hours:</strong> Monday – Saturday: 10:00 AM – 8:30 PM (Sunday closed or by appointment)
         </div>
       </div>
 
-      <div id="publicQrWrap" class="preview" hidden style="text-align:center">
-        <h3 style="margin:0 0 8px 0;color:var(--violet)">Scan & Pay via UPI / GPay</h3>
-        <img id="publicGpayQr" alt="Shop UPI payment QR code" style="display:block;max-width:200px;width:100%;height:auto;margin:12px auto;border-radius:10px;border:1px solid #ddd;padding:6px;background:#fff">
-        <p class="muted" style="margin:6px 0;font-size:12px">
-          Supported: Google Pay, PhonePe, Paytm, BHIM UPI.<br>
-          <em>Please verify the payee name in your UPI app before completing payment.</em>
+      <div class="card" style="text-align:center;padding:24px;border:1px dashed var(--violet)">
+        <div style="font-size:42px;margin-bottom:12px">🧵</div>
+        <h3 style="margin:0 0 8px 0;color:var(--violet)">In-Shop Fitting & Consultation</h3>
+        <p class="muted" style="margin:6px 0;font-size:14px;line-height:1.6">
+          Every garment is personalized to your exact proportions with expert trial sessions before final delivery.
         </p>
+        <a class="btn orange" href="#appointment" style="margin-top:12px;display:inline-block">Book an Appointment</a>
       </div>
     </div>
   </section>
@@ -271,13 +270,6 @@ function selectServiceForEnquiry(serviceName) {
       const w = document.getElementById('publicShopWhatsApp');
       w.textContent = `+${whatsappDigits(shop.whatsapp_number)} (Click to Chat)`;
       w.href = 'https://wa.me/' + whatsappDigits(shop.whatsapp_number) + '?text=' + encodeURIComponent('Hello Jolly Ladies Tailor, I would like to enquire about tailoring services.');
-    }
-    if (shop.upi_id) {
-      document.getElementById('publicUpi').textContent = 'UPI ID: ' + shop.upi_id;
-    }
-    if (shop.gpayQrUrl) {
-      document.getElementById('publicGpayQr').src = shop.gpayQrUrl;
-      document.getElementById('publicQrWrap').hidden = false;
     }
   } catch (e) {
     console.warn('Shop profile loaded with standard defaults.', e);

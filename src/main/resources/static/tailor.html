@@ -206,26 +206,30 @@
 
       <div class="grid">
         <div class="field">
-          <label for="orderProduct">Stitching Service *</label>
+          <label for="orderProduct">Stitching Service / Stock Item *</label>
           <select id="orderProduct"></select>
         </div>
         <div class="field">
-          <label for="orderRate">Unit Rate (₹)</label>
+          <label for="orderRate">Agreed Unit Rate (₹) <span id="defaultRateBadge" class="pill" style="font-size:11px;background:#f3e8f4;color:var(--violet)">Default: ₹0.00</span></label>
           <input type="number" min="0" step="0.01" id="orderRate" value="0">
         </div>
         <div class="field">
           <label for="orderQty">Quantity</label>
           <input type="number" min="1" id="orderQty" value="1">
         </div>
+        <div class="field" id="adjustmentReasonWrap">
+          <label for="orderReason">Adjustment Reason (if rate modified)</label>
+          <input id="orderReason" placeholder="e.g. Heavy lining, custom latkan, loyalty discount">
+        </div>
         <div class="field">
           <label for="dueDate">Promised Delivery Date</label>
           <input id="dueDate" type="date">
         </div>
         <div class="field">
-          <label for="discount">Discount (₹)</label>
+          <label for="discount">Overall Bill Discount (₹)</label>
           <input id="discount" type="number" min="0" step="0.01" value="0">
         </div>
-        <div class="field">
+        <div class="field full">
           <label for="orderNotes">Order / Fabric Notes</label>
           <input id="orderNotes" placeholder="Fabric color, customer cloth supplied, urgent trial...">
         </div>
@@ -263,15 +267,16 @@
         <table>
           <thead>
             <tr>
-              <th>Service</th>
+              <th>Service / Item</th>
+              <th>Default Rate</th>
+              <th>Agreed Rate</th>
               <th>Qty</th>
-              <th>Rate</th>
               <th>Amount</th>
               <th>Remove</th>
             </tr>
           </thead>
           <tbody id="cartRows">
-            <tr><td colspan="5">No services added to bill yet.</td></tr>
+            <tr><td colspan="6">No services added to bill yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -324,6 +329,30 @@
     <section class="panel section">
       <h2>Record Verified Payment or Refund</h2>
       <p class="muted">Record manual payments after confirming receipt in Google Pay / cash box.</p>
+
+      <!-- Shop GPay QR In-Store Verification Card -->
+      <div style="margin:16px 0 20px 0;padding:16px;background:#fdf6fd;border-radius:12px;border:1px solid #ebd3e8">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <h3 style="margin:0;color:var(--violet)">💳 In-Shop UPI / GPay Payment</h3>
+            <p class="muted" style="margin:4px 0;font-size:13px">Show the shop's configured GPay QR to customer for direct UPI payment.</p>
+          </div>
+          <button id="toggleGpayQrBtn" class="btn light" type="button">📱 Show Shop GPay QR</button>
+        </div>
+
+        <div id="shopGpayQrDisplay" class="hidden" style="margin-top:16px;text-align:center;background:#fff;padding:16px;border-radius:10px;border:1px solid #ddd">
+          <h4 id="tailorQrShopName" style="margin:0 0 4px 0;color:var(--violet)">Jolly Ladies Tailor</h4>
+          <p id="tailorQrUpiId" style="margin:0 0 10px 0;font-weight:700;color:#333;font-size:14px">UPI ID: Loading...</p>
+          <img id="tailorGpayQrImg" alt="Shop GPay QR" style="max-width:220px;width:100%;height:auto;border:1px solid #ccc;border-radius:8px;padding:6px;background:#fff;margin:0 auto;display:block">
+          <p id="tailorQrDueAmount" style="margin:10px 0 0 0;font-size:15px;font-weight:700;color:var(--orange)"></p>
+          <div class="notice" style="margin-top:12px;font-size:13px;background:#fff2d6;color:#995400;text-align:left">
+            ⚠️ <strong>Verification Workflow:</strong><br>
+            1. Have customer scan QR & complete payment in Google Pay / UPI app.<br>
+            2. Verify funds arrival in the shop's bank account or GPay notification.<br>
+            3. Enter verified amount below and submit "Record Transaction".
+          </div>
+        </div>
+      </div>
       <form id="paymentForm">
         <div class="grid">
           <div class="field">

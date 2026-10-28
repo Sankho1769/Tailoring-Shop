@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Customer e-Bill | Jolly Ladies Tailor</title>
+  <link rel="stylesheet" href="/css/site.css">
+  <style>
+    body { background: #fdf8fc; padding: 20px 12px; }
+    .bill-container { max-width: 680px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #ebd3e8; box-shadow: 0 10px 30px rgba(64,8,73,0.08); overflow: hidden; }
+    .bill-header { background: linear-gradient(135deg, var(--violet) 0%, #681577 100%); color: #ffffff; padding: 28px 24px; text-align: center; }
+    .bill-header h1 { font-family: Georgia, serif; margin: 0; font-size: 28px; letter-spacing: 0.5px; }
+    .bill-header p { margin: 6px 0 0 0; font-size: 14px; opacity: 0.9; }
+    .bill-body { padding: 24px; }
+    .bill-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px dashed #d9bcd7; font-size: 14px; line-height: 1.6; }
+    .bill-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .bill-table th { background: #f7ebf6; color: var(--violet); padding: 10px 12px; text-align: left; font-size: 13px; font-weight: 700; border-bottom: 1px solid #e0c2de; }
+    .bill-table td { padding: 12px; border-bottom: 1px solid #f0e2ef; font-size: 14px; }
+    .totals-box { margin-top: 16px; margin-left: auto; max-width: 280px; font-size: 14px; line-height: 1.8; }
+    .totals-row { display: flex; justify-content: space-between; }
+    .totals-row.grand { font-size: 17px; font-weight: 700; color: var(--violet); border-top: 2px solid var(--violet); padding-top: 6px; margin-top: 4px; }
+    .totals-row.due { font-size: 16px; font-weight: 700; color: #b30000; border-top: 1px dashed #d9bcd7; padding-top: 4px; margin-top: 4px; }
+    .bill-actions { display: flex; justify-content: center; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .bill-container { border: none; box-shadow: none; max-width: 100%; }
+      .bill-actions, .no-print { display: none !important; }
+      .bill-header { background: #400849 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bill-container">
+  <div class="bill-header">
+    <div style="font-size:32px;margin-bottom:6px">🧵</div>
+    <h1 id="shopName">Jolly Ladies Tailor</h1>
+    <p id="shopAddress">Custom Ladies Tailoring & Alteration Specialist</p>
+    <p id="shopContact" style="font-size:13px;margin-top:4px"></p>
+  </div>
+
+  <div class="bill-body">
+    <div id="loading" class="notice">Loading e-Bill details...</div>
+    <div id="error" class="notice error" hidden></div>
+
+    <div id="billContent" class="hidden">
+      <div class="bill-meta">
+        <div>
+          <span style="font-size:12px;color:#777;text-transform:uppercase;font-weight:700">Customer Details</span><br>
+          <strong id="custName" style="font-size:16px;color:var(--violet)"></strong><br>
+          <span id="custPhone" class="muted"></span>
+        </div>
+        <div style="text-align:right">
+          <span style="font-size:12px;color:#777;text-transform:uppercase;font-weight:700">Bill Details</span><br>
+          <strong>Bill #:</strong> <span id="billNumber"></span><br>
+          <strong>Date:</strong> <span id="billDate"></span><br>
+          <span id="deliveryRow"><strong>Delivery:</strong> <span id="deliveryDate"></span><br></span>
+          <strong>Status:</strong> <span id="orderStatus"></span> · <span id="paymentStatus"></span>
+        </div>
+      </div>
+
+      <div class="divider-title">Order Items</div>
+      <table class="bill-table">
+        <thead>
+          <tr>
+            <th>Item / Service</th>
+            <th style="text-align:center">Qty</th>
+            <th style="text-align:right">Unit Rate</th>
+            <th style="text-align:right">Amount</th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody"></tbody>
+      </table>
+
+      <div class="totals-box">
+        <div class="totals-row"><span>Subtotal:</span><span id="billSubtotal">₹0.00</span></div>
+        <div class="totals-row" id="discountRow" hidden><span>Discount:</span><span id="billDiscount">- ₹0.00</span></div>
+        <div class="totals-row grand"><span>Total Amount:</span><span id="billTotal">₹0.00</span></div>
+        <div class="totals-row"><span>Amount Paid:</span><span id="billPaid" style="color:#18643d">₹0.00</span></div>
+        <div class="totals-row due"><span>Balance Due:</span><span id="billDue">₹0.00</span></div>
+      </div>
+
+      <div id="paymentsSection" class="hidden" style="margin-top:24px">
+        <div class="divider-title">Payment Receipts</div>
+        <table class="bill-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Method</th>
+              <th style="text-align:right">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="paymentsBody"></tbody>
+        </table>
+      </div>
+
+      <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid #ebd3e8;font-size:13px;color:#666">
+        <p style="margin:0 0 6px 0">Thank you for choosing <strong id="footShopName">Jolly Ladies Tailor</strong>!</p>
+        <p style="margin:0;font-size:12px">Garments crafted to fit you perfectly. For any questions, please contact our workshop.</p>
+      </div>
+
+      <div class="bill-actions no-print">
+        <button class="btn" onclick="window.print()">🖨️ Print / Save PDF</button>
+        <a id="shopWaBtn" class="btn orange" href="#" target="_blank" rel="noopener">💬 Chat with Shop on WhatsApp</a>
+        <a class="btn light" href="/">← Return to Shop Website</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+(async () => {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+  const phone = params.get('phone');
+
+  if (!id) {
+    document.getElementById('loading').hidden = true;
+    const err = document.getElementById('error');
+    err.textContent = 'Invalid or missing bill ID. Please check the link from your WhatsApp message.';
+    err.hidden = false;
+    return;
+  }
+
+  try {
+    const url = '/api/public/bills/' + encodeURIComponent(id) + (phone ? '?phone=' + encodeURIComponent(phone) : '');
+    const bill = await API.get(url);
+
+    document.getElementById('loading').hidden = true;
+    document.getElementById('billContent').classList.remove('hidden');
+
+    // Shop Details
+    if (bill.shop) {
+      document.getElementById('shopName').textContent = bill.shop.name || 'Jolly Ladies Tailor';
+      document.getElementById('footShopName').textContent = bill.shop.name || 'Jolly Ladies Tailor';
+      if (bill.shop.address) document.getElementById('shopAddress').textContent = bill.shop.address;
+      const contactParts = [];
+      if (bill.shop.phone) contactParts.push('📞 ' + bill.shop.phone);
+      if (bill.shop.whatsapp) contactParts.push('💬 WhatsApp: +' + whatsappDigits(bill.shop.whatsapp));
+      document.getElementById('shopContact').textContent = contactParts.join(' · ');
+
+      if (bill.shop.whatsapp) {
+        const waLink = `https://wa.me/${whatsappDigits(bill.shop.whatsapp)}?text=${encodeURIComponent('Hello, I have an enquiry regarding my bill ' + bill.order_number)}`;
+        document.getElementById('shopWaBtn').href = waLink;
+      }
+    }
+
+    // Bill Meta
+    document.getElementById('custName').textContent = bill.customer_name || 'Customer';
+    document.getElementById('custPhone').textContent = bill.customer_phone_masked || bill.customer_phone || '';
+    document.getElementById('billNumber').textContent = bill.order_number;
+    document.getElementById('billDate').textContent = bill.created_at ? new Date(bill.created_at).toLocaleDateString() : '—';
+    if (bill.due_date) {
+      document.getElementById('deliveryDate').textContent = bill.due_date;
+    } else {
+      document.getElementById('deliveryRow').hidden = true;
+    }
+
+    document.getElementById('orderStatus').textContent = bill.status || 'NEW';
+    const payStatus = bill.payment_status || 'PAYMENT_DUE';
+    document.getElementById('paymentStatus').innerHTML = payStatus === 'PAID'
+      ? '<span class="pill" style="background:#e3f7eb;color:#18643d">Paid</span>'
+      : (payStatus === 'PARTIALLY_PAID'
+        ? '<span class="pill" style="background:#fff2d6;color:#995400">Partially Paid</span>'
+        : (payStatus === 'REFUNDED'
+          ? '<span class="pill" style="background:#eedaf7;color:#591873">Refunded</span>'
+          : '<span class="pill orange">Payment Due</span>'));
+
+    // Items
+    const items = bill.items || [];
+    document.getElementById('itemsBody').innerHTML = items.map(item => `
+      <tr>
+        <td><strong>${escapeHTML(item.item_name)}</strong></td>
+        <td style="text-align:center">${item.quantity}</td>
+        <td style="text-align:right">${money(item.unit_rate)}</td>
+        <td style="text-align:right"><strong>${money(item.amount)}</strong></td>
+      </tr>
+    `).join('');
+
+    // Totals
+    document.getElementById('billSubtotal').textContent = money(bill.subtotal);
+    if (Number(bill.discount) > 0) {
+      document.getElementById('discountRow').hidden = false;
+      document.getElementById('billDiscount').textContent = '- ' + money(bill.discount);
+    }
+    document.getElementById('billTotal').textContent = money(bill.total);
+    document.getElementById('billPaid').textContent = money(bill.amount_paid);
+    document.getElementById('billDue').textContent = money(bill.due);
+
+    // Payments
+    const payments = bill.payments || [];
+    if (payments.length > 0) {
+      document.getElementById('paymentsSection').classList.remove('hidden');
+      document.getElementById('paymentsBody').innerHTML = payments.map(p => `
+        <tr>
+          <td>${p.received_at ? new Date(p.received_at).toLocaleDateString() : '—'}</td>
+          <td>${escapeHTML(p.payment_type || 'PAYMENT')}</td>
+          <td>${escapeHTML(p.method || 'UPI')}</td>
+          <td style="text-align:right;font-weight:700;color:${p.payment_type === 'REFUND' ? '#591873' : '#18643d'}">
+            ${p.payment_type === 'REFUND' ? '- ' : ''}${money(p.amount)}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+  } catch (err) {
+    document.getElementById('loading').hidden = true;
+    const errEl = document.getElementById('error');
+    errEl.textContent = 'Unable to load bill: ' + (err.message || 'Please check your link');
+    errEl.hidden = false;
+  }
+})();
+</script>
+</body>
+</html>

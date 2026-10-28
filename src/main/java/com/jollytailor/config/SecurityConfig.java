@@ -38,8 +38,9 @@ public class SecurityConfig {
         CookieCsrfTokenRepository csrf = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrf.setCookiePath("/");
         http.csrf(c -> c.csrfTokenRepository(csrf))
+            .exceptionHandling(e -> e.authenticationEntryPoint(new org.springframework.security.web.authentication.HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/index.html", "/tailor.html", "/admin.html", "/css/**", "/js/**", "/favicon.ico", "/error", "/api/auth/csrf", "/api/auth/login", "/api/public/**").permitAll()
+                .requestMatchers("/", "/index.html", "/tailor.html", "/admin.html", "/bill.html", "/css/**", "/js/**", "/favicon.ico", "/error", "/api/auth/csrf", "/api/auth/login", "/api/public/**").permitAll()
                 .requestMatchers("/api/admin/**", "/api/media/**").hasRole("ADMIN")
                 .requestMatchers("/api/tailor/**").hasAnyRole("ADMIN", "TAILOR")
                 .anyRequest().authenticated())

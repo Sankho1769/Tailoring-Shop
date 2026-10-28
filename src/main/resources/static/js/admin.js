@@ -34,6 +34,7 @@ async function showAdmin(me) {
     loadStats(),
     loadCategories(),
     loadProducts(),
+    loadPriceAdjustments(),
     loadAdminCustomers(),
     loadAdminPayments(),
     loadRequests(),
@@ -141,8 +142,9 @@ async function openCustomerOrders(customerId, customerName) {
         <td><strong>${money(o.due)}</strong></td>
         <td>${o.due_date ? escapeHTML(o.due_date) : '—'}</td>
         <td>${new Date(o.created_at).toLocaleDateString()}</td>
+        <td><a class="btn light" href="/bill.html?id=${o.id}" target="_blank" rel="noopener" style="padding:4px 8px;font-size:12px">View e-Bill ↗</a></td>
       </tr>
-    `).join('') : '<tr><td colspan="8">No orders for this customer.</td></tr>';
+    `).join('') : '<tr><td colspan="9">No orders for this customer.</td></tr>';
 
     container.classList.remove('hidden');
     container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -211,8 +213,10 @@ async function loadProducts() {
   tbody.innerHTML = products.map(p => `
     <tr>
       <td><strong>${escapeHTML(p.name)}</strong><br><small class="muted">${escapeHTML(p.description || '')}</small></td>
+      <td><span class="pill" style="font-size:11px">${p.product_type === 'READY_MADE' ? 'Ready-Made' : 'Service'}</span></td>
       <td>${escapeHTML(p.category || '—')}</td>
-      <td>${money(p.default_rate)}</td>
+      <td><strong>${money(p.default_rate)}</strong></td>
+      <td>${p.product_type === 'READY_MADE' ? p.stock_quantity : '—'}</td>
       <td>${p.active ? '<span class="pill">Active</span>' : '<span class="pill orange">Inactive</span>'}</td>
       <td>
         ${p.imageUrl ? `<img src="${escapeHTML(p.imageUrl)}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;vertical-align:middle;margin-right:6px">` : ''}
@@ -227,7 +231,7 @@ async function loadProducts() {
         </button>
       </td>
     </tr>
-  `).join('') || '<tr><td colspan="6">No products/services configured yet.</td></tr>';
+  `).join('') || '<tr><td colspan="8">No products/services configured yet.</td></tr>';
 
   document.querySelectorAll('[data-toggle-product]').forEach(b => {
     b.onclick = async () => {
@@ -258,18 +262,47 @@ async function loadProducts() {
   });
 }
 
+async function loadPriceAdjustments() {
+  try {
+    const list = await API.get('/api/admin/price-adjustments');
+    const tbody = document.getElementById('adjustmentsRows');
+    tbody.innerHTML = list.length ? list.map(a => {
+      const diff = Number(a.difference || 0);
+      return `
+      <tr>
+        <td>${a.adjusted_at ? new Date(a.adjusted_at).toLocaleDateString() : '—'}</td>
+        <td><strong>${escapeHTML(a.order_number)}</strong></td>
+        <td>${escapeHTML(a.customer_name)}<br><small class="muted">${escapeHTML(a.customer_phone)}</small></td>
+        <td>${escapeHTML(a.item_name)}</td>
+        <td>${money(a.default_rate)}</td>
+        <td><strong>${money(a.unit_rate)}</strong></td>
+        <td style="font-weight:700;color:${diff < 0 ? '#b30000' : 'var(--green)'}">
+          ${diff > 0 ? '+' : ''}${money(diff)}
+        </td>
+        <td style="max-width:200px;white-space:normal">${escapeHTML(a.adjustment_reason || '—')}</td>
+        <td>${escapeHTML(a.adjusted_by_name || 'Staff')}</td>
+      </tr>
+    `}).join('') : '<tr><td colspan="9">No price adjustments recorded. Tailors have used default prices.</td></tr>';
+  } catch (e) {
+    console.error('Failed to load price adjustments', e);
+  }
+}
+
 async function addProduct(e) {
   e.preventDefault();
   try {
     await API.post('/api/admin/products', {
       name: av('pName'),
       categoryId: av('pCategory') || null,
+      productType: av('pType') || 'SERVICE',
+      stockQuantity: Number(av('pStock') || 0),
       defaultRate: Number(av('pRate') || 0),
       description: av('pDescription')
     });
-    setNotice('#productNotice', 'Service created successfully.', true);
+    setNotice('#productNotice', 'Item created successfully.', true);
     e.target.reset();
     document.getElementById('pRate').value = '0';
+    document.getElementById('pStock').value = '0';
     await Promise.all([loadProducts(), loadStats()]);
   } catch (err) {
     setNotice('#productNotice', err.message);
@@ -414,6 +447,7 @@ async function loadShopSettings() {
     document.getElementById('shopPhone').value = s.shop_phone || '';
     document.getElementById('shopAddress').value = s.shop_address || '';
     document.getElementById('shopWhatsapp').value = s.whatsapp_number || '';
+    document.getElementById('shopAdminPhone').value = s.admin_notification_phone || '';
     document.getElementById('shopUpi').value = s.upi_id || '';
 
     if (s.gpay_qr_key) {
@@ -439,6 +473,7 @@ async function saveShopSettings(e) {
         shop_phone: av('shopPhone'),
         shop_address: av('shopAddress'),
         whatsapp_number: av('shopWhatsapp'),
+        admin_notification_phone: av('shopAdminPhone'),
         upi_id: av('shopUpi')
       })
     });
@@ -501,6 +536,7 @@ document.getElementById('categoryForm').addEventListener('submit', addCategory);
 document.getElementById('userForm').addEventListener('submit', addUser);
 document.getElementById('exportStats').addEventListener('click', exportStatsCSV);
 document.getElementById('refreshProducts').addEventListener('click', () => Promise.all([loadProducts(), loadCategories()]));
+document.getElementById('refreshAdjustments').addEventListener('click', loadPriceAdjustments);
 document.getElementById('refreshRequests').addEventListener('click', loadRequests);
 document.getElementById('shopSettingsForm').addEventListener('submit', saveShopSettings);
 document.getElementById('uploadShopQr').addEventListener('click', uploadShopQr);

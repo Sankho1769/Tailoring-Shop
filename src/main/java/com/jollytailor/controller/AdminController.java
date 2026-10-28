@@ -3,13 +3,19 @@ package com.jollytailor.controller;
 import com.jollytailor.service.StorageService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -38,30 +44,33 @@ public class AdminController {
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "range must be today, 7d, month or all");
         };
 
-        String where = switch (period) {
-            case "today" -> "created_at >= CURRENT_DATE";
-            case "7d" -> "created_at >= NOW() - INTERVAL '7 days'";
-            case "month" -> "created_at >= date_trunc('month', NOW())";
-            default -> "TRUE";
+        OffsetDateTime cutoff = switch (period) {
+            case "today" -> LocalDate.now().atStartOfDay().atOffset(ZoneOffset.UTC);
+            case "7d" -> OffsetDateTime.now(ZoneOffset.UTC).minusDays(7);
+            case "month" -> LocalDate.now().withDayOfMonth(1).atStartOfDay().atOffset(ZoneOffset.UTC);
+            default -> null;
         };
+
+        String where = cutoff != null ? "created_at >= ?" : "1=1";
+        Object[] params = cutoff != null ? new Object[]{cutoff} : new Object[]{};
 
         Map<String,Object> out = new LinkedHashMap<>();
         out.put("range", period);
-        out.put("orders", jdbc.queryForObject("SELECT COUNT(*) FROM tailoring_orders WHERE " + where, Long.class));
-        out.put("billed", zero(jdbc.queryForObject("SELECT COALESCE(SUM(total),0) FROM tailoring_orders WHERE " + where, BigDecimal.class)));
-        out.put("collected", zero(jdbc.queryForObject("SELECT COALESCE(SUM(amount_paid),0) FROM tailoring_orders WHERE " + where, BigDecimal.class)));
-        out.put("due", zero(jdbc.queryForObject("SELECT COALESCE(SUM(GREATEST(total-amount_paid,0)),0) FROM tailoring_orders WHERE " + where, BigDecimal.class)));
+        out.put("orders", jdbc.queryForObject("SELECT COUNT(*) FROM tailoring_orders WHERE " + where, Long.class, params));
+        out.put("billed", zero(jdbc.queryForObject("SELECT COALESCE(SUM(total),0) FROM tailoring_orders WHERE " + where, BigDecimal.class, params)));
+        out.put("collected", zero(jdbc.queryForObject("SELECT COALESCE(SUM(amount_paid),0) FROM tailoring_orders WHERE " + where, BigDecimal.class, params)));
+        out.put("due", zero(jdbc.queryForObject("SELECT COALESCE(SUM(GREATEST(total-amount_paid,0)),0) FROM tailoring_orders WHERE " + where, BigDecimal.class, params)));
         out.put("customers", jdbc.queryForObject("SELECT COUNT(*) FROM customers", Long.class));
         out.put("products", jdbc.queryForObject("SELECT COUNT(*) FROM products WHERE active=true", Long.class));
         out.put("requests", jdbc.queryForObject("SELECT COUNT(*) FROM customer_requests WHERE status='NEW'", Long.class));
 
         // Payment status counts and totals
         out.put("paidOrders", jdbc.queryForObject(
-                "SELECT COUNT(*) FROM tailoring_orders WHERE " + where + " AND total > 0 AND amount_paid >= total", Long.class));
+                "SELECT COUNT(*) FROM tailoring_orders WHERE " + where + " AND total > 0 AND amount_paid >= total", Long.class, params));
         out.put("partiallyPaidOrders", jdbc.queryForObject(
-                "SELECT COUNT(*) FROM tailoring_orders WHERE " + where + " AND amount_paid > 0 AND amount_paid < total", Long.class));
+                "SELECT COUNT(*) FROM tailoring_orders WHERE " + where + " AND amount_paid > 0 AND amount_paid < total", Long.class, params));
         out.put("dueOrders", jdbc.queryForObject(
-                "SELECT COUNT(*) FROM tailoring_orders WHERE " + where + " AND amount_paid = 0 AND total > 0", Long.class));
+                "SELECT COUNT(*) FROM tailoring_orders WHERE " + where + " AND amount_paid = 0 AND total > 0", Long.class, params));
 
         List<Map<String,Object>> salesByDay = new ArrayList<>();
         LocalDate today = LocalDate.now();
@@ -76,10 +85,11 @@ public class AdminController {
         }
         out.put("salesByDay", salesByDay);
 
-        out.put("topServices", jdbc.queryForList(
-                "SELECT item_name AS name, SUM(quantity) AS quantity, SUM(amount) AS revenue " +
+        String tsWhere = cutoff != null ? "o.created_at >= ?" : "1=1";
+        String tsSql = "SELECT item_name AS name, SUM(quantity) AS quantity, SUM(amount) AS revenue " +
                 "FROM order_items i JOIN tailoring_orders o ON o.id=i.order_id " +
-                "WHERE " + where.replace("created_at", "o.created_at") + " GROUP BY item_name ORDER BY revenue DESC LIMIT 8"));
+                "WHERE " + tsWhere + " GROUP BY item_name ORDER BY revenue DESC LIMIT 8";
+        out.put("topServices", cutoff != null ? jdbc.queryForList(tsSql, cutoff) : jdbc.queryForList(tsSql));
 
         out.put("recentOrders", jdbc.queryForList(
                 "SELECT o.id, o.order_number, o.status, " +
@@ -87,10 +97,10 @@ public class AdminController {
                 "o.total, o.amount_paid, (o.total-o.amount_paid) AS due, o.created_at, c.name AS customer, c.phone " +
                 "FROM tailoring_orders o JOIN customers c ON c.id=o.customer_id ORDER BY o.created_at DESC LIMIT 10"));
 
-        out.put("paymentMethods", jdbc.queryForList(
-                "SELECT method, COALESCE(SUM(amount),0) AS amount, COUNT(*) AS transactions " +
-                "FROM payments WHERE received_at >= CASE WHEN ?='today' THEN CURRENT_DATE WHEN ?='7d' THEN NOW()-INTERVAL '7 days' WHEN ?='month' THEN date_trunc('month',NOW()) ELSE '-infinity'::timestamptz END " +
-                "GROUP BY method ORDER BY amount DESC", period, period, period));
+        String pmSql = cutoff != null
+                ? "SELECT method, COALESCE(SUM(amount),0) AS amount, COUNT(*) AS transactions FROM payments WHERE received_at >= ? GROUP BY method ORDER BY amount DESC"
+                : "SELECT method, COALESCE(SUM(amount),0) AS amount, COUNT(*) AS transactions FROM payments GROUP BY method ORDER BY amount DESC";
+        out.put("paymentMethods", cutoff != null ? jdbc.queryForList(pmSql, cutoff) : jdbc.queryForList(pmSql));
 
         return out;
     }
@@ -147,14 +157,16 @@ public class AdminController {
 
     @PutMapping("/shop-settings")
     public Map<String,String> saveShopSettings(@RequestBody Map<String,Object> body) {
-        for (String key : List.of("shop_name", "shop_address", "shop_phone", "whatsapp_number", "upi_id")) {
+        for (String key : List.of("shop_name", "shop_address", "shop_phone", "whatsapp_number", "admin_notification_phone", "upi_id")) {
             if (body.containsKey(key)) {
                 String value = body.get(key) == null ? "" : body.get(key).toString().trim();
                 if (value.length() > 1000) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Setting is too long");
                 }
-                jdbc.update("INSERT INTO shop_settings(setting_key, setting_value, updated_at) VALUES(?,?,NOW()) " +
-                            "ON CONFLICT(setting_key) DO UPDATE SET setting_value=EXCLUDED.setting_value, updated_at=NOW()", key, value);
+                int updated = jdbc.update("UPDATE shop_settings SET setting_value=?, updated_at=NOW() WHERE setting_key=?", value, key);
+                if (updated == 0) {
+                    jdbc.update("INSERT INTO shop_settings(setting_key, setting_value, updated_at) VALUES(?,?,NOW())", key, value);
+                }
             }
         }
         return Map.of("message", "Shop settings saved");
@@ -173,8 +185,15 @@ public class AdminController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category name required");
         }
         try {
-            Long id = jdbc.queryForObject("INSERT INTO categories(name, description) VALUES(?,?) RETURNING id",
-                    Long.class, name, blank(text(b, "description")));
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbc.update(connection -> {
+                PreparedStatement ps = connection.prepareStatement(
+                        "INSERT INTO categories(name, description) VALUES(?,?)", new String[]{"id"});
+                ps.setString(1, name);
+                ps.setString(2, blank(text(b, "description")));
+                return ps;
+            }, keyHolder);
+            Long id = extractKey(keyHolder);
             return Map.of("id", id, "name", name);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Category already exists");
@@ -190,7 +209,7 @@ public class AdminController {
     @GetMapping("/products")
     public List<Map<String,Object>> products() {
         List<Map<String,Object>> rows = jdbc.queryForList(
-                "SELECT p.id, p.name, p.description, p.default_rate, p.image_key, p.active, c.id AS category_id, c.name AS category " +
+                "SELECT p.id, p.name, p.description, p.default_rate, p.product_type, p.stock_quantity, p.image_key, p.active, c.id AS category_id, c.name AS category " +
                 "FROM products p LEFT JOIN categories c ON c.id=p.category_id ORDER BY p.name");
         rows.forEach(r -> {
             Object key = r.get("image_key");
@@ -212,12 +231,27 @@ public class AdminController {
         if (rate.signum() < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rate cannot be negative");
         }
+        String productType = text(b, "productType").toUpperCase();
+        if (productType.isBlank() || !Set.of("SERVICE", "READY_MADE").contains(productType)) {
+            productType = "SERVICE";
+        }
+        int stockQuantity = 0;
+        if (b.containsKey("stockQuantity")) {
+            try {
+                stockQuantity = Integer.parseInt(String.valueOf(b.get("stockQuantity")));
+            } catch (Exception e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid stock quantity");
+            }
+            if (stockQuantity < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Stock quantity cannot be negative");
+            }
+        }
         Long cat = longOrNull(b.get("categoryId"));
         UUID id = UUID.randomUUID();
         try {
-            jdbc.update("INSERT INTO products(id, category_id, name, description, default_rate) VALUES(?,?,?,?,?)",
-                    id, cat, name, blank(text(b, "description")), rate);
-            return Map.of("id", id, "name", name, "defaultRate", rate);
+            jdbc.update("INSERT INTO products(id, category_id, name, description, default_rate, product_type, stock_quantity) VALUES(?,?,?,?,?,?,?)",
+                    id, cat, name, blank(text(b, "description")), rate, productType, stockQuantity);
+            return Map.of("id", id, "name", name, "defaultRate", rate, "productType", productType, "stockQuantity", stockQuantity);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Product already exists");
         }
@@ -226,7 +260,21 @@ public class AdminController {
     @PatchMapping("/products/{id}")
     public Map<String,String> updateProduct(@PathVariable UUID id, @RequestBody Map<String,Object> b) {
         if (b.containsKey("name")) jdbc.update("UPDATE products SET name=?, updated_at=NOW() WHERE id=?", text(b, "name"), id);
-        if (b.containsKey("defaultRate")) jdbc.update("UPDATE products SET default_rate=?, updated_at=NOW() WHERE id=?", decimal(b.get("defaultRate")), id);
+        if (b.containsKey("defaultRate")) {
+            BigDecimal rate = decimal(b.get("defaultRate"));
+            if (rate.signum() < 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rate cannot be negative");
+            jdbc.update("UPDATE products SET default_rate=?, updated_at=NOW() WHERE id=?", rate, id);
+        }
+        if (b.containsKey("productType")) {
+            String pt = text(b, "productType").toUpperCase();
+            if (!Set.of("SERVICE", "READY_MADE").contains(pt)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid product type");
+            jdbc.update("UPDATE products SET product_type=?, updated_at=NOW() WHERE id=?", pt, id);
+        }
+        if (b.containsKey("stockQuantity")) {
+            int sq = Integer.parseInt(String.valueOf(b.get("stockQuantity")));
+            if (sq < 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Stock quantity cannot be negative");
+            jdbc.update("UPDATE products SET stock_quantity=?, updated_at=NOW() WHERE id=?", sq, id);
+        }
         if (b.containsKey("active")) jdbc.update("UPDATE products SET active=?, updated_at=NOW() WHERE id=?", Boolean.parseBoolean(String.valueOf(b.get("active"))), id);
         if (b.containsKey("description")) jdbc.update("UPDATE products SET description=?, updated_at=NOW() WHERE id=?", blank(text(b, "description")), id);
         if (b.containsKey("categoryId")) jdbc.update("UPDATE products SET category_id=?, updated_at=NOW() WHERE id=?", longOrNull(b.get("categoryId")), id);
@@ -241,6 +289,44 @@ public class AdminController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found");
         }
         return Map.of("imageKey", key, "url", storage.publicUrl(key), "message", "Image uploaded successfully");
+    }
+
+    @GetMapping("/price-adjustments")
+    public List<Map<String,Object>> priceAdjustments() {
+        return jdbc.queryForList(
+                "SELECT oi.id, oi.order_id, oi.item_name, oi.quantity, oi.default_rate, oi.unit_rate, oi.discount, oi.amount, " +
+                "oi.adjustment_reason, oi.adjusted_at, (oi.unit_rate - oi.default_rate) AS difference, " +
+                "o.order_number, c.name AS customer_name, c.phone AS customer_phone, " +
+                "u.username AS adjusted_by_name " +
+                "FROM order_items oi " +
+                "JOIN tailoring_orders o ON o.id = oi.order_id " +
+                "JOIN customers c ON c.id = o.customer_id " +
+                "LEFT JOIN app_users u ON u.id = oi.adjusted_by " +
+                "WHERE oi.adjusted_at IS NOT NULL OR oi.default_rate <> oi.unit_rate " +
+                "ORDER BY oi.adjusted_at DESC, o.created_at DESC");
+    }
+
+    @GetMapping("/orders/{id}")
+    public Map<String,Object> order(@PathVariable UUID id) {
+        Map<String,Object> out;
+        try {
+            out = jdbc.queryForMap(
+                    "SELECT o.id, o.order_number, o.customer_id, o.measurement_id, o.status, " +
+                    "COALESCE(o.payment_status, CASE WHEN o.total > 0 AND o.amount_paid >= o.total THEN 'PAID' WHEN o.amount_paid > 0 THEN 'PARTIALLY_PAID' ELSE 'PAYMENT_DUE' END) AS payment_status, " +
+                    "o.due_date, o.notes, o.subtotal, o.discount, o.total, o.amount_paid, (o.total - o.amount_paid) AS due, o.created_at, " +
+                    "c.name AS customer, c.phone, c.address " +
+                    "FROM tailoring_orders o JOIN customers c ON c.id=o.customer_id WHERE o.id=?", id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found");
+        }
+        out.put("items", jdbc.queryForList(
+                "SELECT oi.id, oi.product_id, oi.item_name, oi.quantity, oi.default_rate, oi.unit_rate, oi.discount, oi.amount, " +
+                "oi.adjustment_reason, oi.adjusted_at, u.username AS adjusted_by_name " +
+                "FROM order_items oi LEFT JOIN app_users u ON u.id = oi.adjusted_by WHERE oi.order_id=?", id));
+        out.put("payments", jdbc.queryForList(
+                "SELECT p.id, p.amount, p.method, p.reference, p.note, COALESCE(p.payment_type, 'PAYMENT') AS payment_type, p.received_at, u.username AS collector " +
+                "FROM payments p LEFT JOIN app_users u ON u.id = p.received_by WHERE p.order_id=? ORDER BY p.received_at", id));
+        return out;
     }
 
     @GetMapping("/users")
@@ -258,8 +344,16 @@ public class AdminController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Provide username, password of at least 12 characters, and ADMIN or TAILOR role");
         }
         try {
-            Long id = jdbc.queryForObject("INSERT INTO app_users(username, password_hash, role) VALUES(?,?,?) RETURNING id",
-                    Long.class, username, encoder.encode(password), role);
+            KeyHolder keyHolder = new GeneratedKeyHolder();
+            jdbc.update(connection -> {
+                PreparedStatement ps = connection.prepareStatement(
+                        "INSERT INTO app_users(username, password_hash, role) VALUES(?,?,?)", new String[]{"id"});
+                ps.setString(1, username);
+                ps.setString(2, encoder.encode(password));
+                ps.setString(3, role);
+                return ps;
+            }, keyHolder);
+            Long id = extractKey(keyHolder);
             return Map.of("id", id, "username", username, "role", role);
         } catch (org.springframework.dao.DuplicateKeyException ex) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
@@ -415,5 +509,23 @@ public class AdminController {
 
     private BigDecimal zero(BigDecimal b) {
         return b == null ? BigDecimal.ZERO : b;
+    }
+
+    private Long extractKey(KeyHolder keyHolder) {
+        if (keyHolder.getKeys() != null && !keyHolder.getKeys().isEmpty()) {
+            Map<String, Object> keys = keyHolder.getKeys();
+            for (String col : List.of("id", "ID", "id_")) {
+                if (keys.containsKey(col) && keys.get(col) instanceof Number num) {
+                    return num.longValue();
+                }
+            }
+            for (Object v : keys.values()) {
+                if (v instanceof Number num) {
+                    return num.longValue();
+                }
+            }
+        }
+        Number k = keyHolder.getKey();
+        return k != null ? k.longValue() : 1L;
     }
 }

@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS products (
   name VARCHAR(140) NOT NULL UNIQUE,
   description TEXT,
   default_rate NUMERIC(12,2) NOT NULL DEFAULT 0,
+  product_type VARCHAR(30) NOT NULL DEFAULT 'SERVICE',
+  stock_quantity INTEGER NOT NULL DEFAULT 0,
   image_key TEXT,
   active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -89,8 +91,13 @@ CREATE TABLE IF NOT EXISTS order_items (
   product_id UUID REFERENCES products(id) ON DELETE SET NULL,
   item_name VARCHAR(140) NOT NULL,
   quantity INTEGER NOT NULL CHECK (quantity > 0),
+  default_rate NUMERIC(12,2) NOT NULL DEFAULT 0,
   unit_rate NUMERIC(12,2) NOT NULL CHECK (unit_rate >= 0),
-  amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0)
+  discount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+  adjustment_reason VARCHAR(255),
+  adjusted_by BIGINT REFERENCES app_users(id),
+  adjusted_at TIMESTAMP WITH TIME ZONE
 );
 
 CREATE TABLE IF NOT EXISTS payments (

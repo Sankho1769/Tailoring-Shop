@@ -3,6 +3,7 @@ MERGE INTO shop_settings (setting_key, setting_value) KEY (setting_key) VALUES
  ('shop_address', '12/A Southern Avenue, Kolkata'),
  ('shop_phone', '+91 98300 12345'),
  ('whatsapp_number', '919830012345'),
+ ('admin_notification_phone', '919830099999'),
  ('upi_id', 'jollytailor@okaxis'),
  ('gpay_qr_key', '');
 

@@ -128,6 +128,7 @@ class AdminAndPublicIntegrationTest {
                 "shop_phone", "+91 98300 11223",
                 "shop_address", "Gariahat Market, Kolkata",
                 "whatsapp_number", "919830011223",
+                "admin_notification_phone", "919830099999",
                 "upi_id", "jollytailor@okaxis"
         );
 
@@ -137,10 +138,16 @@ class AdminAndPublicIntegrationTest {
                         .content(mapper.writeValueAsString(shopPayload)))
                 .andExpect(status().isOk());
 
-        // 5. Verify public endpoint reflects the updated shop settings
+        // 5. Verify public endpoint reflects the updated shop settings (without checkout QR exposure)
         mockMvc.perform(get("/api/public/shop"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shop_name", is("Jolly Ladies Tailor")))
+                .andExpect(jsonPath("$.whatsapp_number", is("919830011223")));
+
+        // 6. Verify admin can inspect shop settings
+        mockMvc.perform(get("/api/admin/shop-settings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.admin_notification_phone", is("919830099999")))
                 .andExpect(jsonPath("$.upi_id", is("jollytailor@okaxis")));
     }
 }

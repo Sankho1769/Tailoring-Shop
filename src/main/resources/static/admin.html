@@ -207,6 +207,7 @@
                 <th>Due</th>
                 <th>Promised Delivery</th>
                 <th>Date</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody id="adminCustomerOrdersRows"></tbody>
@@ -271,6 +272,10 @@
             <input id="shopWhatsapp" maxlength="30" placeholder="91XXXXXXXXXX">
           </div>
           <div class="field">
+            <label for="shopAdminPhone">Admin Notification Phone (WhatsApp)</label>
+            <input id="shopAdminPhone" maxlength="30" placeholder="e.g. 919830099999">
+          </div>
+          <div class="field">
             <label for="shopUpi">UPI Payment ID</label>
             <input id="shopUpi" maxlength="120" placeholder="jollytailor@okaxis">
           </div>
@@ -298,24 +303,35 @@
         <form id="productForm">
           <div class="grid">
             <div class="field">
-              <label for="pName">Service Name *</label>
-              <input id="pName" required maxlength="140" placeholder="e.g. Bridal Blouse, Anarkali">
+              <label for="pName">Service / Product Name *</label>
+              <input id="pName" required maxlength="140" placeholder="e.g. Bridal Blouse, Anarkali, Ready-made Kurti">
             </div>
             <div class="field">
               <label for="pCategory">Category</label>
               <select id="pCategory"></select>
             </div>
             <div class="field">
-              <label for="pRate">Default Stitching Rate (₹)</label>
+              <label for="pType">Item Type</label>
+              <select id="pType">
+                <option value="SERVICE">Service (Custom Stitching)</option>
+                <option value="READY_MADE">Ready-Made Stock Product</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="pRate">Default Unit Rate (₹)</label>
               <input id="pRate" type="number" min="0" step="0.01" value="0">
             </div>
             <div class="field">
+              <label for="pStock">Stock Quantity (if ready-made)</label>
+              <input id="pStock" type="number" min="0" value="0">
+            </div>
+            <div class="field">
               <label for="pDescription">Description</label>
-              <input id="pDescription" maxlength="500" placeholder="Finishing details, delivery days">
+              <input id="pDescription" maxlength="500" placeholder="Finishing details, delivery days, fabric specifications">
             </div>
           </div>
           <div class="form-actions">
-            <button class="btn orange" type="submit">Add Service</button>
+            <button class="btn orange" type="submit">Add Service / Product</button>
           </div>
           <div id="productNotice" class="notice" hidden></div>
         </form>
@@ -324,9 +340,11 @@
           <table>
             <thead>
               <tr>
-                <th>Service</th>
+                <th>Item</th>
+                <th>Type</th>
                 <th>Category</th>
-                <th>Rate</th>
+                <th>Default Rate</th>
+                <th>Stock</th>
                 <th>Status</th>
                 <th>Image</th>
                 <th>Action</th>
@@ -359,6 +377,38 @@
         <p class="muted">Catalog images are uploaded securely to Supabase Storage via backend S3 credentials. Only public product photos and the public QR code should be uploaded.</p>
       </section>
     </div>
+
+    <!-- Price Overrides & Adjustments Audit -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Tailor Price Adjustments Audit</h2>
+          <p class="muted">Review all order line items where tailor modified the default admin price.</p>
+        </div>
+        <button id="refreshAdjustments" class="btn ghost" type="button">Refresh Adjustments</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Bill #</th>
+              <th>Customer</th>
+              <th>Item Name</th>
+              <th>Default Rate</th>
+              <th>Agreed Rate</th>
+              <th>Difference</th>
+              <th>Adjustment Reason</th>
+              <th>Tailor</th>
+            </tr>
+          </thead>
+          <tbody id="adjustmentsRows">
+            <tr><td colspan="9">Loading price adjustments...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
     <!-- Consumer Enquiries -->
     <section class="panel section">

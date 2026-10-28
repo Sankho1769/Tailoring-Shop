@@ -2,8 +2,11 @@ package com.jollytailor.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jollytailor.service.StorageService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
@@ -17,10 +20,33 @@ import org.springframework.web.server.ResponseStatusException;
 public class TailorController {
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
+    private final StorageService storage;
 
-    public TailorController(JdbcTemplate jdbc, ObjectMapper mapper) {
+    public TailorController(JdbcTemplate jdbc, ObjectMapper mapper, StorageService storage) {
         this.jdbc = jdbc;
         this.mapper = mapper;
+        this.storage = storage;
+    }
+
+    @GetMapping("/payment-qr")
+    public Map<String,Object> paymentQr() {
+        Map<String,String> settings = new HashMap<>();
+        jdbc.query("SELECT setting_key, setting_value FROM shop_settings", rs -> {
+            settings.put(rs.getString(1), rs.getString(2));
+        });
+        Map<String,Object> out = new LinkedHashMap<>();
+        out.put("shopName", settings.getOrDefault("shop_name", "Jolly Ladies Tailor"));
+        out.put("shopAddress", settings.getOrDefault("shop_address", ""));
+        out.put("shopPhone", settings.getOrDefault("shop_phone", ""));
+        out.put("upiId", settings.getOrDefault("upi_id", ""));
+        out.put("adminNotificationPhone", settings.getOrDefault("admin_notification_phone", ""));
+        String qrKey = settings.get("gpay_qr_key");
+        if (qrKey != null && !qrKey.isBlank()) {
+            out.put("gpayQrUrl", storage.publicUrl(qrKey));
+        } else {
+            out.put("gpayQrUrl", null);
+        }
+        return out;
     }
 
     @GetMapping("/customers")
@@ -150,10 +176,12 @@ public class TailorController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found");
         }
         out.put("items", jdbc.queryForList(
-                "SELECT id, product_id, item_name, quantity, unit_rate, amount FROM order_items WHERE order_id=?", id));
+                "SELECT oi.id, oi.product_id, oi.item_name, oi.quantity, oi.default_rate, oi.unit_rate, oi.discount, oi.amount, " +
+                "oi.adjustment_reason, oi.adjusted_at, u.username AS adjusted_by_name " +
+                "FROM order_items oi LEFT JOIN app_users u ON u.id = oi.adjusted_by WHERE oi.order_id=?", id));
         out.put("payments", jdbc.queryForList(
-                "SELECT id, amount, method, reference, note, COALESCE(payment_type, 'PAYMENT') AS payment_type, received_at " +
-                "FROM payments WHERE order_id=? ORDER BY received_at", id));
+                "SELECT p.id, p.amount, p.method, p.reference, p.note, COALESCE(p.payment_type, 'PAYMENT') AS payment_type, p.received_at, u.username AS collector " +
+                "FROM payments p LEFT JOIN app_users u ON u.id = p.received_by WHERE p.order_id=? ORDER BY p.received_at", id));
 
         Object mId = out.get("measurement_id");
         if (mId != null) {
@@ -195,6 +223,7 @@ public class TailorController {
         BigDecimal subtotal = BigDecimal.ZERO;
         List<Map<String,Object>> prepared = new ArrayList<>();
 
+        long uid = currentUserId(auth);
         for (Object item : itemList) {
             if (!(item instanceof Map<?,?> m)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid bill item format");
@@ -204,25 +233,80 @@ public class TailorController {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item name is required");
             }
             int qty;
-            BigDecimal rate;
+            BigDecimal unitRate;
             try {
                 qty = Integer.parseInt(String.valueOf(itemValue(m, "quantity", 1)));
-                rate = new BigDecimal(String.valueOf(itemValue(m, "rate", 0)));
+                Object rateObj = m.containsKey("unitRate") ? m.get("unitRate") : itemValue(m, "rate", 0);
+                unitRate = new BigDecimal(String.valueOf(rateObj));
             } catch (Exception ex) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid quantity or rate");
             }
-            if (qty < 1 || rate.signum() < 0) {
+            if (qty < 1 || unitRate.signum() < 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Quantity must be positive and rate cannot be negative");
             }
-            BigDecimal amount = rate.multiply(BigDecimal.valueOf(qty));
+
+            BigDecimal itemDiscount = BigDecimal.ZERO;
+            if (m.containsKey("discount") && m.get("discount") != null && !m.get("discount").toString().isBlank()) {
+                itemDiscount = decimal(m.get("discount"));
+                if (itemDiscount.signum() < 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item discount cannot be negative");
+                }
+            }
+
+            BigDecimal lineGross = unitRate.multiply(BigDecimal.valueOf(qty));
+            if (itemDiscount.compareTo(lineGross) > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item discount cannot exceed line total");
+            }
+            BigDecimal amount = lineGross.subtract(itemDiscount);
             subtotal = subtotal.add(amount);
-            prepared.add(Map.of(
-                    "name", name,
-                    "quantity", qty,
-                    "rate", rate,
-                    "amount", amount,
-                    "productId", m.get("productId") == null ? "" : String.valueOf(m.get("productId"))
-            ));
+
+            String productIdStr = m.get("productId") == null ? "" : String.valueOf(m.get("productId")).trim();
+            UUID prodId = null;
+            BigDecimal defaultRate = null;
+            if (!productIdStr.isBlank()) {
+                try {
+                    prodId = UUID.fromString(productIdStr);
+                    var pRows = jdbc.queryForList("SELECT default_rate FROM products WHERE id=?", prodId);
+                    if (!pRows.isEmpty() && pRows.get(0).get("default_rate") != null) {
+                        defaultRate = (BigDecimal) pRows.get(0).get("default_rate");
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            if (defaultRate == null) {
+                if (m.containsKey("defaultRate") && m.get("defaultRate") != null && !m.get("defaultRate").toString().isBlank()) {
+                    defaultRate = decimal(m.get("defaultRate"));
+                } else {
+                    defaultRate = unitRate;
+                }
+            }
+
+            String reason = null;
+            Long adjustedBy = null;
+            OffsetDateTime adjustedAt = null;
+
+            if (unitRate.compareTo(defaultRate) != 0) {
+                adjustedBy = uid > 0 ? uid : null;
+                adjustedAt = OffsetDateTime.now(ZoneOffset.UTC);
+                Object rObj = m.get("adjustmentReason");
+                reason = rObj != null ? String.valueOf(rObj).trim() : "";
+                if (reason.isBlank()) {
+                    reason = "Price adjusted by tailor";
+                }
+            }
+
+            Map<String,Object> pMap = new HashMap<>();
+            pMap.put("name", name);
+            pMap.put("quantity", qty);
+            pMap.put("defaultRate", defaultRate);
+            pMap.put("unitRate", unitRate);
+            pMap.put("discount", itemDiscount);
+            pMap.put("amount", amount);
+            pMap.put("productId", prodId);
+            pMap.put("adjustmentReason", reason);
+            pMap.put("adjustedBy", adjustedBy);
+            pMap.put("adjustedAt", adjustedAt);
+            prepared.add(pMap);
         }
 
         BigDecimal discount = decimal(b.get("discount"));
@@ -230,7 +314,6 @@ public class TailorController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid discount amount");
         }
         BigDecimal total = subtotal.subtract(discount);
-        long uid = currentUserId(auth);
 
         // Check if an initial advance payment is provided
         BigDecimal advance = decimal(b.get("advanceAmount"));
@@ -247,13 +330,14 @@ public class TailorController {
 
         jdbc.update("INSERT INTO tailoring_orders(id, order_number, customer_id, measurement_id, status, payment_status, due_date, notes, subtotal, discount, total, amount_paid, created_by) " +
                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                id, number, customerId, measurementId, "NEW", paymentStatus, dateOrNull(b.get("dueDate")), blank(text(b, "notes")), subtotal, discount, total, amountPaid, uid);
+                id, number, customerId, measurementId, "NEW", paymentStatus, dateOrNull(b.get("dueDate")), blank(text(b, "notes")), subtotal, discount, total, amountPaid, uid > 0 ? uid : null);
 
         for (Map<String,Object> item : prepared) {
-            String productId = String.valueOf(item.get("productId"));
-            jdbc.update("INSERT INTO order_items(id, order_id, product_id, item_name, quantity, unit_rate, amount) " +
-                        "VALUES(?,?,?, ?,?,?,?)",
-                    UUID.randomUUID(), id, productId.isBlank() ? null : UUID.fromString(productId), item.get("name"), item.get("quantity"), item.get("rate"), item.get("amount"));
+            jdbc.update("INSERT INTO order_items(id, order_id, product_id, item_name, quantity, default_rate, unit_rate, discount, amount, adjustment_reason, adjusted_by, adjusted_at) " +
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                    UUID.randomUUID(), id, item.get("productId"), item.get("name"), item.get("quantity"),
+                    item.get("defaultRate"), item.get("unitRate"), item.get("discount"), item.get("amount"),
+                    item.get("adjustmentReason"), item.get("adjustedBy"), item.get("adjustedAt"));
         }
 
         if (advance.signum() > 0) {

@@ -38,6 +38,7 @@ let products = [];
 let cart = [];
 let orders = [];
 let shopSettings = {};
+let paymentQrData = {};
 
 const val = id => {
   const el = document.getElementById(id);
@@ -246,18 +247,20 @@ async function loadProducts() {
   const sel = document.getElementById('orderProduct');
   sel.innerHTML = products.map(p =>
     `<option value="${p.id}" data-name="${escapeHTML(p.name)}" data-rate="${p.default_rate}">
-      ${escapeHTML(p.name)} · ${money(p.default_rate)}
+      ${escapeHTML(p.name)} · ${money(p.default_rate)} ${p.product_type === 'READY_MADE' ? '(Stock)' : ''}
     </option>`
   ).join('');
-  if (products[0]) {
-    document.getElementById('orderRate').value = products[0].default_rate;
-  }
+  updateRate();
 }
 
 function updateRate() {
   const opt = document.querySelector('#orderProduct option:checked');
   if (opt) {
-    document.getElementById('orderRate').value = opt.dataset.rate || 0;
+    const rate = opt.dataset.rate || 0;
+    document.getElementById('orderRate').value = rate;
+    const badge = document.getElementById('defaultRateBadge');
+    if (badge) badge.textContent = `Default: ${money(rate)}`;
+    document.getElementById('orderReason').value = '';
   }
 }
 
@@ -273,21 +276,41 @@ function addCartItem() {
     setNotice('#orderNotice', 'Please verify service quantity and rate.');
     return;
   }
-  cart.push({ productId: p.id, name: p.name, quantity: qty, rate });
+  const defaultRate = Number(p.default_rate || 0);
+  const reason = val('orderReason');
+  cart.push({
+    productId: p.id,
+    name: p.name,
+    quantity: qty,
+    defaultRate: defaultRate,
+    rate: rate,
+    unitRate: rate,
+    adjustmentReason: (rate !== defaultRate ? (reason || 'Price adjusted by tailor') : '')
+  });
+  document.getElementById('orderReason').value = '';
   drawCart();
 }
 
 function drawCart() {
   const body = document.getElementById('cartRows');
-  body.innerHTML = cart.length ? cart.map((x, i) => `
+  body.innerHTML = cart.length ? cart.map((x, i) => {
+    const isAdjusted = Number(x.rate) !== Number(x.defaultRate);
+    return `
     <tr>
-      <td><strong>${escapeHTML(x.name)}</strong></td>
+      <td>
+        <strong>${escapeHTML(x.name)}</strong>
+        ${isAdjusted ? `<br><small style="color:var(--orange)">⚠️ ${escapeHTML(x.adjustmentReason || 'Rate adjusted')}</small>` : ''}
+      </td>
+      <td>${money(x.defaultRate)}</td>
+      <td>
+        <strong>${money(x.rate)}</strong>
+        ${isAdjusted ? '<span class="pill" style="font-size:10px;margin-left:4px">Override</span>' : ''}
+      </td>
       <td>${x.quantity}</td>
-      <td>${money(x.rate)}</td>
-      <td>${money(x.rate * x.quantity)}</td>
+      <td><strong>${money(x.rate * x.quantity)}</strong></td>
       <td><button class="btn ghost" type="button" data-remove-cart="${i}">Remove</button></td>
     </tr>
-  `).join('') : '<tr><td colspan="5">No services added to bill yet.</td></tr>';
+  `}).join('') : '<tr><td colspan="6">No services added to bill yet.</td></tr>';
 
   body.querySelectorAll('[data-remove-cart]').forEach(b => {
     b.onclick = () => {
@@ -345,7 +368,15 @@ async function createOrder() {
       advanceAmount: advance,
       advanceMethod: val('advanceMethod'),
       advanceRef: val('advanceRef'),
-      items: cart
+      items: cart.map(x => ({
+        productId: x.productId,
+        name: x.name,
+        quantity: x.quantity,
+        defaultRate: x.defaultRate,
+        rate: x.rate,
+        unitRate: x.rate,
+        adjustmentReason: x.adjustmentReason
+      }))
     });
 
     renderInvoiceAndSharing(result);
@@ -364,22 +395,36 @@ async function createOrder() {
 function renderInvoiceAndSharing(result) {
   const customerPhone = whatsappDigits(currentCustomer ? currentCustomer.phone : result.phone);
   const due = Number(result.total) - Number(result.amount_paid);
+  const billUrl = `${window.location.origin}/bill.html?id=${result.id}`;
+  const adminPhone = paymentQrData.adminNotificationPhone ? whatsappDigits(paymentQrData.adminNotificationPhone) : '';
 
-  const message = [
+  const customerMessage = [
     `*${shopSettings.shop_name || 'Jolly Ladies Tailor'}*`,
     `Invoice: *${result.order_number}*`,
     `Customer: ${currentCustomer ? currentCustomer.name : result.customer}`,
     `Date: ${new Date().toLocaleDateString()}`,
     result.due_date ? `Promised Delivery: ${result.due_date}` : '',
     `--------------------------`,
-    ...(result.items || cart).map(i => `• ${i.item_name || i.name} x ${i.quantity}: ${money(i.amount || (i.rate * i.quantity))}`),
+    ...(result.items || cart).map(i => `• ${i.item_name || i.name} x ${i.quantity}: ${money(i.amount || (i.unit_rate || i.rate) * i.quantity)}`),
     `--------------------------`,
     `Total: ${money(result.total)}`,
     Number(result.amount_paid) > 0 ? `Paid / Advance: ${money(result.amount_paid)}` : '',
     `Outstanding Due: ${money(due)}`,
     `Status: ${result.status}`,
-    shopSettings.upi_id ? `\nUPI Payment ID: ${shopSettings.upi_id}` : '',
+    `\n📄 View or print your e-Bill online:\n${billUrl}`,
     `\nThank you for choosing ${shopSettings.shop_name || 'Jolly Ladies Tailor'}!`
+  ].filter(Boolean).join('\n');
+
+  const adminAlertMessage = [
+    `🔔 *NEW BILL / PAYMENT UPDATE*`,
+    `Shop: ${shopSettings.shop_name || 'Jolly Ladies Tailor'}`,
+    `Bill #: *${result.order_number}*`,
+    `Customer: ${currentCustomer ? currentCustomer.name : result.customer} (${currentCustomer ? currentCustomer.phone : result.phone})`,
+    `Total: ${money(result.total)}`,
+    `Paid: ${money(result.amount_paid)}`,
+    `Due: ${money(due)}`,
+    result.due_date ? `Delivery Date: ${result.due_date}` : '',
+    `Link: ${billUrl}`
   ].filter(Boolean).join('\n');
 
   const row = document.getElementById('orderResult');
@@ -390,8 +435,10 @@ function renderInvoiceAndSharing(result) {
         <h3 style="margin:0;color:var(--violet)">Bill Created: ${escapeHTML(result.order_number)}</h3>
         <p class="muted" style="margin:4px 0">Customer: <strong>${escapeHTML(currentCustomer ? currentCustomer.name : result.customer)}</strong> · Due: <strong>${money(due)}</strong></p>
       </div>
-      <div class="form-actions" style="margin:0">
-        <button class="btn orange" id="shareBill" type="button">📲 Share e-Bill via WhatsApp</button>
+      <div class="form-actions" style="margin:0;gap:8px;flex-wrap:wrap">
+        <button class="btn orange" id="shareBill" type="button">📲 Share e-Bill with Customer (WhatsApp)</button>
+        ${adminPhone ? `<button class="btn light" id="notifyAdminBill" type="button">🔔 Send Alert to Admin (WhatsApp)</button>` : ''}
+        <button class="btn ghost" id="viewFullBill" type="button">🔗 View e-Bill Page</button>
         <button class="btn ghost" id="copyBillText" type="button">📋 Copy Text</button>
         <button class="btn" id="printBill" type="button">🖨️ Print Invoice / PDF</button>
       </div>
@@ -436,7 +483,7 @@ function renderInvoiceAndSharing(result) {
               <td style="padding:8px">${escapeHTML(x.item_name || x.name)}</td>
               <td style="padding:8px;text-align:center">${x.quantity}</td>
               <td style="padding:8px;text-align:right">${money(x.unit_rate || x.rate)}</td>
-              <td style="padding:8px;text-align:right">${money(x.amount || (x.rate * x.quantity))}</td>
+              <td style="padding:8px;text-align:right">${money(x.amount || (x.unit_rate || x.rate) * x.quantity)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -456,14 +503,6 @@ function renderInvoiceAndSharing(result) {
         </div>
       </div>
 
-      ${shopSettings.upi_id || shopSettings.gpayQrUrl ? `
-        <div style="margin-top:20px;border-top:1px solid #ddd;padding-top:12px;text-align:center">
-          <p style="margin:4px 0;font-size:13px;font-weight:700">Scan to pay via Google Pay / UPI</p>
-          ${shopSettings.gpayQrUrl ? `<img src="${escapeHTML(shopSettings.gpayQrUrl)}" alt="UPI QR code" style="width:130px;height:auto;margin:6px auto;display:block">` : ''}
-          ${shopSettings.upi_id ? `<p style="margin:2px 0;font-size:12px;color:#555">UPI ID: <strong>${escapeHTML(shopSettings.upi_id)}</strong></p>` : ''}
-        </div>
-      ` : ''}
-
       <div style="margin-top:20px;text-align:center;font-size:12px;color:#777;border-top:1px solid #eee;padding-top:8px">
         Thank you for choosing ${escapeHTML(shopSettings.shop_name || 'Jolly Ladies Tailor')}! Stitched with care to fit you.
       </div>
@@ -475,14 +514,25 @@ function renderInvoiceAndSharing(result) {
       alert('Customer phone number is missing or invalid.');
       return;
     }
-    window.open(`https://wa.me/${customerPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    window.open(`https://wa.me/${customerPhone}?text=${encodeURIComponent(customerMessage)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const adminBtn = document.getElementById('notifyAdminBill');
+  if (adminBtn) {
+    adminBtn.onclick = () => {
+      window.open(`https://wa.me/${adminPhone}?text=${encodeURIComponent(adminAlertMessage)}`, '_blank', 'noopener,noreferrer');
+    };
+  }
+
+  document.getElementById('viewFullBill').onclick = () => {
+    window.open(billUrl, '_blank');
   };
 
   document.getElementById('copyBillText').onclick = () => {
-    navigator.clipboard.writeText(message).then(() => {
+    navigator.clipboard.writeText(customerMessage).then(() => {
       alert('E-bill text copied to clipboard!');
     }).catch(() => {
-      prompt('Copy the bill text below:', message);
+      prompt('Copy the bill text below:', customerMessage);
     });
   };
 
@@ -513,6 +563,41 @@ function renderInvoiceAndSharing(result) {
   };
 }
 
+async function loadPaymentQr() {
+  try {
+    paymentQrData = await API.get('/api/tailor/payment-qr');
+    if (paymentQrData.shopName) {
+      document.getElementById('tailorQrShopName').textContent = paymentQrData.shopName;
+    }
+    if (paymentQrData.upiId) {
+      document.getElementById('tailorQrUpiId').textContent = 'UPI ID: ' + paymentQrData.upiId;
+    } else {
+      document.getElementById('tailorQrUpiId').textContent = 'UPI ID: Not configured in Admin';
+    }
+    const img = document.getElementById('tailorGpayQrImg');
+    if (paymentQrData.gpayQrUrl) {
+      img.src = paymentQrData.gpayQrUrl;
+      img.style.display = 'block';
+    } else {
+      img.style.display = 'none';
+    }
+  } catch (e) {
+    console.warn('Could not load tailor payment QR', e);
+  }
+}
+
+function updateQrDueAmount() {
+  const sel = document.getElementById('paymentOrder');
+  if (!sel) return;
+  const ord = orders.find(o => o.id === sel.value);
+  const dueEl = document.getElementById('tailorQrDueAmount');
+  if (ord && dueEl) {
+    dueEl.textContent = `Amount to Collect: ${money(ord.due)} (${ord.order_number})`;
+  } else if (dueEl) {
+    dueEl.textContent = '';
+  }
+}
+
 async function loadOrders() {
   try {
     orders = await API.get('/api/tailor/orders');
@@ -535,8 +620,11 @@ async function loadOrders() {
         <td><strong>${money(o.due)}</strong></td>
         <td>${o.due_date ? escapeHTML(o.due_date) : '—'}</td>
         <td>
-          <button class="btn ghost" type="button" data-wa-order="${o.id}">WhatsApp</button>
-          <button class="btn ghost" type="button" data-view-order="${o.id}">View</button>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="btn ghost" type="button" data-wa-order="${o.id}">WhatsApp</button>
+            <button class="btn ghost" type="button" data-view-order="${o.id}">Invoice</button>
+            <a class="btn light" href="/bill.html?id=${o.id}" target="_blank" rel="noopener" style="padding:4px 8px;font-size:12px">e-Bill ↗</a>
+          </div>
         </td>
       </tr>
     `).join('') : '<tr><td colspan="9">No orders recorded yet.</td></tr>';
@@ -557,6 +645,7 @@ async function loadOrders() {
         try {
           const o = await API.get('/api/tailor/orders/' + btn.dataset.waOrder);
           const phone = whatsappDigits(o.phone);
+          const billUrl = `${window.location.origin}/bill.html?id=${o.id}`;
           const msg = [
             `*${shopSettings.shop_name || 'Jolly Ladies Tailor'}*`,
             `E-bill: *${o.order_number}*`,
@@ -565,8 +654,8 @@ async function loadOrders() {
             `Total: ${money(o.total)}`,
             `Paid: ${money(o.amount_paid)}`,
             `Due: ${money(o.due)}`,
-            shopSettings.upi_id ? `UPI ID: ${shopSettings.upi_id}` : '',
-            `Thank you!`
+            `\n📄 View complete e-Bill:\n${billUrl}`,
+            `\nThank you!`
           ].filter(Boolean).join('\n');
           if (phone) {
             window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
@@ -603,6 +692,11 @@ async function loadOrders() {
     if (open[0]) {
       document.getElementById('paymentAmount').value = Number(open[0].due).toFixed(2);
     }
+    updateQrDueAmount();
+  } catch (err) {
+    console.error('Failed to load orders', err);
+  }
+}
   } catch (err) {
     console.error('Failed to load orders', err);
   }
@@ -644,6 +738,7 @@ async function loadInitial() {
   try {
     shopSettings = await API.get('/api/public/shop').catch(() => ({}));
     await Promise.all([
+      loadPaymentQr(),
       loadCustomers(),
       loadProducts(),
       loadOrders()
@@ -697,6 +792,18 @@ document.getElementById('orderProduct').addEventListener('change', updateRate);
 document.getElementById('addOrderItem').addEventListener('click', addCartItem);
 document.getElementById('createOrder').addEventListener('click', createOrder);
 document.getElementById('discount').addEventListener('input', drawCart);
+document.getElementById('paymentOrder').addEventListener('change', () => {
+  const ord = orders.find(o => o.id === val('paymentOrder'));
+  if (ord) {
+    document.getElementById('paymentAmount').value = Number(ord.due).toFixed(2);
+  }
+  updateQrDueAmount();
+});
+document.getElementById('toggleGpayQrBtn').addEventListener('click', () => {
+  const p = document.getElementById('shopGpayQrDisplay');
+  p.classList.toggle('hidden');
+  updateQrDueAmount();
+});
 document.getElementById('paymentForm').addEventListener('submit', recordPaymentOrRefund);
 document.getElementById('refreshOrders').addEventListener('click', loadOrders);
 document.getElementById('logout').addEventListener('click', logout);

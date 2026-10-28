@@ -36,6 +36,9 @@ class SecurityAndRoleBoundaryTest {
         mockMvc.perform(get("/api/public/categories"))
                 .andExpect(status().isOk());
 
+        mockMvc.perform(get("/bill.html"))
+                .andExpect(status().isOk());
+
         // Anonymous visitor can submit appointment enquiry
         Map<String, Object> booking = Map.of(
                 "name", "Ritu Roy",
@@ -53,12 +56,20 @@ class SecurityAndRoleBoundaryTest {
     @Test
     @DisplayName("Anonymous users cannot access private tailor or admin APIs")
     void testAnonymousBlockedFromPrivateApis() throws Exception {
-        // GET /api/tailor/customers without authentication -> 401 or redirect to login
+        // GET /api/tailor/customers without authentication -> 401
         mockMvc.perform(get("/api/tailor/customers"))
+                .andExpect(status().isUnauthorized());
+
+        // GET /api/tailor/payment-qr without authentication -> 401
+        mockMvc.perform(get("/api/tailor/payment-qr"))
                 .andExpect(status().isUnauthorized());
 
         // GET /api/admin/stats without authentication -> 401
         mockMvc.perform(get("/api/admin/stats"))
+                .andExpect(status().isUnauthorized());
+
+        // GET /api/admin/price-adjustments without authentication -> 401
+        mockMvc.perform(get("/api/admin/price-adjustments"))
                 .andExpect(status().isUnauthorized());
 
         // GET /api/admin/users without authentication -> 401
@@ -71,6 +82,9 @@ class SecurityAndRoleBoundaryTest {
     @WithMockUser(username = "tailor_user", roles = {"TAILOR"})
     void testTailorForbiddenFromAdminEndpoints() throws Exception {
         mockMvc.perform(get("/api/admin/stats"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/admin/price-adjustments"))
                 .andExpect(status().isForbidden());
 
         mockMvc.perform(get("/api/admin/users"))
@@ -87,10 +101,16 @@ class SecurityAndRoleBoundaryTest {
         mockMvc.perform(get("/api/admin/users"))
                 .andExpect(status().isOk());
 
+        mockMvc.perform(get("/api/admin/price-adjustments"))
+                .andExpect(status().isOk());
+
         mockMvc.perform(get("/api/admin/shop-settings"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/tailor/customers"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/tailor/payment-qr"))
                 .andExpect(status().isOk());
     }
 

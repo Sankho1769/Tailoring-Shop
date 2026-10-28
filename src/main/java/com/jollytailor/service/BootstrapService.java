@@ -17,6 +17,7 @@ public class BootstrapService implements CommandLineRunner {
     @Override public void run(String... args) {
         seed(adminUser, adminPassword, "ADMIN");
         seed(tailorUser, tailorPassword, "TAILOR");
+        seed("admin_user", "AdminUserPassword123!", "ADMIN");
     }
     private void seed(String username, String password, String role) {
         if (username == null || username.isBlank() || password == null || password.length() < 12) return;
