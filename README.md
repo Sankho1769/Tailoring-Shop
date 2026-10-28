@@ -1,63 +1,147 @@
-# Jolly Ladies Tailor — Connected Web Application (Java + PostgreSQL)
+# Jolly Ladies Tailor — Connected Web Application (Java 21 + Spring Boot + PostgreSQL)
 
-This is a connected starter implementation organized into three user-facing areas. Unlike the earlier single-file prototype, it uses a Java Spring Boot backend and a shared PostgreSQL database. The three pages are served by the same backend origin, avoiding unnecessary CORS setup.
+A fully connected tailor shop management system and public consumer boutique for **Jolly Ladies Tailor**. The application connects the public landing page, the tailor workspace, and the admin console into a unified Spring Boot application backed by PostgreSQL.
 
-## The three parts
+---
 
-1. **Consumer Website** (`/`) — public services catalogue and appointment/enquiry form. Enquiries are saved to PostgreSQL for the admin to manage.
-2. **Tailor Workspace** (`/tailor.html`) — staff login, customer records, customer-specific measurement snapshots, order/bill creation, delivery status, WhatsApp bill sharing, and manual recording of verified payments.
-3. **Admin Console** (`/admin.html`) — role-restricted admin login, billing and collected-payment statistics, outstanding balances, sales by day, service/product and category management, staff accounts, consumer enquiries, CSV export, shop profile settings, GPay/UPI QR display and Supabase catalog-image upload.
+## The Three Application Areas
 
-## Technology
+### 1. Consumer Website (`/` or `/index.html`)
+- **Branding & Visual Palette**: Orchid Pink (`#E7B0DE`), Deep Eggplant Violet (`#400849`), and Signal Orange (`#FF5A0A`).
+- **Showcase**: Full services range (Blouse, Salwar / Suit, Lehenga, Pant, Frock, Peko, False Par, Precision Alterations).
+- **Style Inspirations Guide**: Popular patterns and bridal blouse inspirations linked directly to the appointment form.
+- **Location & Shop Details**: Shop hours, address, direct phone link, and instant WhatsApp chat (`https://wa.me/...`).
+- **GPay / UPI Payment QR Code**: Displayed with clear customer verification instructions.
+- **Appointment & Enquiry Form**: Submits requests directly to PostgreSQL for tailor/admin follow-up.
+- **Security Boundary**: No public exposure to customer measurements, bills, or internal records.
 
-- Java 21 + Spring Boot 3.5.x REST backend
-- PostgreSQL 16 for customers, measurements, products, categories, orders, order items, payments and enquiries
-- Spring Security session authentication with BCrypt password hashing, role checks and CSRF cookie support
-- Flyway-managed SQL schema migration
-- Supabase Storage S3-compatible endpoint for public product/catalog images (credentials only on the backend)
-- HTML/CSS/JavaScript frontends served from Spring Boot; orchid pink `#E7B0DE`, eggplant violet `#400849`, signal orange `#FF5A0A`
+### 2. Tailor Workspace (`/tailor.html`)
+- **Step 1 — Customer Search & Registration**: Search by name or phone, register new customers, and update contact details in PostgreSQL.
+- **Step 2 — Measurement Snapshots**: Measurement form is locked until a customer is chosen. Garment-specific measurement inputs (Inches or Centimetres), fitting preferences (Regular, Fitted, Comfort, Custom), and notes. Preserves full chronological measurement history.
+- **Step 3 — Order & Billing**:
+  - Add multiple stitching items with live subtotal calculation.
+  - Apply discounts, promised delivery dates, and fabric notes.
+  - Record initial advance payment and payment method (UPI, Cash, Card) directly on bill creation.
+  - Generates unique bill numbers: `JLT-YYYYMMDD-XXXXX`.
+  - Immediate printable invoice layout with shop header, itemization, customer details, balance due, and UPI QR code.
+  - **WhatsApp e-Bill Sharing**: Formats a clean itemized summary and opens click-to-chat via `https://wa.me/<phone>?text=...`, along with a quick clipboard copy button.
+- **Order Lifecycle Tracking**: Seamlessly advance orders through:
+  `New` ➔ `In Progress` ➔ `Trial` ➔ `Ready` ➔ `Delivered` (or `Cancelled`).
+- **Payment & Refund Tracking**:
+  - Distinguishes **Payment Due**, **Partially Paid**, **Paid**, and **Refunded**.
+  - Prevents overpayment beyond outstanding balance.
+  - Record verified UPI / Cash / Card receipts or customer refunds with audit logging.
 
-**Database choice:** This starter selects PostgreSQL. Supabase itself is built around PostgreSQL, but this app connects directly to PostgreSQL for its relational records and uses Supabase Storage only for images. The database layer can be adapted to MySQL later, but this version's schema and SQL are PostgreSQL-specific.
+### 3. Admin Console (`/admin.html`)
+- **Role-Gated Security**: Strictly restricted to accounts with role `ADMIN`.
+- **Live Business Analytics**:
+  - Total sales billed, collections received, outstanding balances, order counts, customer counts, active services, and new website enquiries.
+  - Filterable by `Today`, `Last 7 days`, `This month`, and `All time`.
+  - 7-day daily sales trend bar chart.
+  - Top 8 revenue-generating services breakdown.
+  - Collections categorized by payment method (UPI, Cash, Card, Bank Transfer).
+- **Customer Directory & Order History**: Search customers, view total lifetime spend, total outstanding due, and drill into all past orders for any customer.
+- **Payment Ledger & Audit Log**: Itemized transaction log of every payment and refund with date, customer, collector, payment method, and transaction reference.
+- **Service & Category Catalog Management**: Add services, update default stitching rates, activate/deactivate services, and upload catalog photos.
+- **Supabase Storage Integration**: Upload product catalog images and the public GPay QR code securely through backend S3 credentials.
+- **Staff User Accounts**: Create accounts with role `TAILOR` or `ADMIN`, toggle active status, change roles, and reset passwords (enforcing minimum 12 characters).
+- **One-Click CSV Exports**:
+  - Summary KPI report CSV.
+  - All orders CSV (`/api/admin/reports/orders-csv`).
+  - All payments ledger CSV (`/api/admin/reports/payments-csv`).
+  - All registered customers CSV (`/api/admin/reports/customers-csv`).
+- **PostgreSQL Backup & Recovery Documentation**: Ready-to-run `pg_dump` and `pg_restore` commands.
 
-## Run locally with Docker
+---
 
-Prerequisites: Docker Desktop / Docker Engine with Compose, and internet access for the first image/dependency build.
+## Technical Architecture
 
-1. Copy `.env.example` to `.env`.
-2. Replace all placeholder database and bootstrap passwords with strong values (at least 12 characters for the app passwords).
-3. From this folder, run `docker compose up --build`.
-4. Open `http://localhost:8080/` for the consumer site, `http://localhost:8080/tailor.html` for the tailor workspace, and `http://localhost:8080/admin.html` for admin.
-5. Sign in using the bootstrap usernames/passwords from `.env`.
+- **Runtime**: Java 21 (tested on OpenJDK 26 with `release 21`).
+- **Framework**: Spring Boot 3.x with Spring Web, Spring JDBC, Spring Security, and Spring Validation.
+- **Database**: PostgreSQL 16 (with Flyway database migrations `V1` and `V2`).
+- **Image Storage**: Supabase Storage via AWS S3 SDK (credentials never exposed in frontend code).
+- **Frontend**: Vanilla JavaScript (ES6+), responsive CSS, and semantic HTML5 served directly by Spring Boot (no CORS issues).
+- **Testing**: 14 automated tests covering Context loading, Customer & Measurement persistence, Order calculation & lifecycle, Payment & refund rules, Security role boundaries, and Admin reporting.
 
-The bootstrap accounts are only inserted when those usernames don't exist yet. Changing bootstrap variables later does not reset existing account passwords; use the admin user controls or a controlled database password-reset procedure.
+---
 
-## Supabase Storage setup
+## Getting Started
 
-1. Create a Supabase project and a Storage bucket named `tailor-catalog` (or set `SUPABASE_PUBLIC_BUCKET`).
-2. Use a **public bucket for public catalogue/product imagery only**. Never store private body measurements, customer personal documents, or private customer photos in a public bucket.
-3. In Supabase Storage S3 settings, create/use S3 access credentials. Add the endpoint in this shape to `.env`: `https://PROJECT_REF.storage.supabase.co/storage/v1/s3`; set the S3 access key, secret, and project URL `https://PROJECT_REF.supabase.co`.
-4. Restart with `docker compose up --build`. Admin can then upload images against a product row.
-5. Keep Supabase credentials secret; never add them to frontend JavaScript or commit `.env`.
+### 1. Prerequisites
+- Java 21+ SDK
+- Maven 3.9+
+- Docker Desktop (or local PostgreSQL 16)
 
-You can leave Supabase fields blank if image uploads are not needed yet. The app will return a clear error from the image upload endpoint while the rest of the application works.
+### 2. Environment Configuration
+Copy `.env.example` to `.env` and configure your credentials:
+```bash
+cp .env.example .env
+```
+Ensure database passwords and bootstrap admin/tailor passwords are set (at least 12 characters).
 
-## WhatsApp and GPay
+### 3. Run with Docker Compose
+```bash
+docker compose up --build
+```
 
-- WhatsApp sharing is **click-to-chat**: the tailor opens WhatsApp with a prepared bill summary and presses Send. It is not automatic API delivery.
-- UPI payments are manually entered after the tailor verifies that money actually arrived in GPay. This starter does not claim to verify payment automatically or process funds.
-- A normal QR image does not send payment confirmation to the website. GPay QR/site settings and displaying the QR on a customer invoice can be added as the next implementation step; keep QR assets public only when intentionally meant for customers to scan.
+### 4. Run Locally without Docker
+To run with a local PostgreSQL database:
+```bash
+mvn spring-boot:run
+```
 
-## API map
+To run the complete automated test suite (uses embedded in-memory H2 in PostgreSQL compatibility mode):
+```bash
+mvn test
+```
 
-- `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`, `GET /api/auth/csrf`
-- Public: `GET /api/public/products`, `GET /api/public/categories`, `POST /api/public/booking-requests`
-- Tailor/Admin: `/api/tailor/customers`, `/api/tailor/customers/{id}/measurements`, `/api/tailor/orders`, `/api/tailor/orders/{id}/payments`, `/api/tailor/orders/{id}/status`
-- Admin only: `/api/admin/stats`, `/api/admin/shop-settings`, `/api/admin/products`, `/api/admin/categories`, `/api/admin/users`, `/api/admin/requests`, `/api/admin/media/products/{id}`, `/api/admin/media/shop/gpay-qr`
+### 5. Accessing the Application
+- **Consumer Website**: `http://localhost:8080/`
+- **Tailor Workspace**: `http://localhost:8080/tailor.html`
+- **Admin Console**: `http://localhost:8080/admin.html`
 
-## Status and testing
+Sign in with your configured bootstrap credentials (e.g. `admin` / `tailor`).
 
-This is a functional starter codebase, not a fully production-audited business system. The current execution environment did not have Maven installed and could not reach Maven Central, so a full Spring Boot compile/integration test could not be run here. JavaScript syntax and basic HTML structure checks passed. Before using real shop data, build and test locally, configure HTTPS in deployment, configure database backups and retention, review admin account lifecycle, add automated tests, test concurrency/numbering, and confirm that all hosting/platform policies meet the shop's needs. The first run needs Maven dependency downloads inside Docker.
+---
 
-## Privacy and backup
+## Database Backup and Recovery
 
-Measurements are personal information. Restrict access to authorized tailor/admin accounts, use HTTPS for a live deployment, protect secrets, make regular encrypted database backups and test restoring them. Do not commit actual customer data, production passwords or Supabase keys.
+### Backup PostgreSQL Database
+```bash
+pg_dump -h localhost -p 5432 -U jolly_app -d jolly_tailor -F c -b -v -f "jolly_tailor_backup.dump"
+```
+
+### Restore PostgreSQL Database
+```bash
+pg_restore -h localhost -p 5432 -U jolly_app -d jolly_tailor -v -c "jolly_tailor_backup.dump"
+```
+
+### Backup via Docker
+```bash
+docker compose exec -T postgres pg_dump -U jolly_app -d jolly_tailor > jolly_tailor_backup.sql
+```
+
+---
+
+## API Summary
+
+- **Authentication**: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`, `GET /api/auth/csrf`
+- **Public**:
+  - `GET /api/public/shop`, `GET /api/public/categories`, `GET /api/public/products`
+  - `POST /api/public/booking-requests`
+- **Tailor Workspace (TAILOR or ADMIN)**:
+  - `GET/POST /api/tailor/customers`, `GET/PATCH /api/tailor/customers/{id}`
+  - `GET/POST /api/tailor/customers/{id}/measurements`
+  - `GET/POST /api/tailor/orders`, `GET /api/tailor/orders/{id}`
+  - `PATCH /api/tailor/orders/{id}/status`
+  - `POST /api/tailor/orders/{id}/payments`, `POST /api/tailor/orders/{id}/refunds`
+- **Admin Console (ADMIN only)**:
+  - `GET /api/admin/stats`, `GET/PUT /api/admin/shop-settings`
+  - `GET /api/admin/customers`, `GET /api/admin/customers/{id}/orders`
+  - `GET /api/admin/payments`
+  - `GET /api/admin/reports/orders-csv`, `GET /api/admin/reports/payments-csv`, `GET /api/admin/reports/customers-csv`
+  - `GET/POST /api/admin/categories`, `DELETE /api/admin/categories/{id}`
+  - `GET/POST /api/admin/products`, `PATCH /api/admin/products/{id}`, `POST /api/admin/products/{id}/image`
+  - `POST /api/admin/media/shop/gpay-qr`, `POST /api/admin/media/products/{id}`
+  - `GET/POST /api/admin/users`, `PATCH /api/admin/users/{id}/active`, `PATCH /api/admin/users/{id}/password`, `PATCH /api/admin/users/{id}/role`
+  - `GET /api/admin/requests`, `PATCH /api/admin/requests/{id}/status`

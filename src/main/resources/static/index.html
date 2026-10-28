@@ -1,12 +1,328 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Jolly Ladies Tailor | Custom Stitching</title><meta name="description" content="Jolly Ladies Tailor — blouse, salwar, pant, frock, lehenga stitching, peko, false par and alterations."><link rel="stylesheet" href="/css/site.css"></head><body>
-<header class="topbar"><a class="brand" href="/"><div class="brand-mark">🧵</div><div><h1>Jolly Ladies Tailor</h1><small>MADE TO FIT YOU</small></div></a><nav class="navlinks"><a href="#services">Services</a><a href="#appointment">Book a Visit</a><a href="/tailor.html">Tailor Login</a></nav></header>
-<main><section class="hero"><div><div class="eyebrow">Your fit. Your style. Your tailor.</div><h2>Stitched with care.<br>Made for you.</h2><p>From everyday alterations to special-occasion outfits, Jolly Ladies Tailor helps you get the fit and finish you love. Contact the shop to discuss your garment, fitting and delivery date.</p><div class="form-actions"><a class="btn orange" href="#appointment">Request an Appointment</a><a class="btn light" href="#services">Explore Services</a></div></div><div class="hero-art" aria-label="Sewing thread illustration">🪡<span style="position:absolute;font-size:15px;bottom:20px;left:18px;color:white;letter-spacing:2px">CUT • FIT • FINISH</span></div></section>
-<section class="section" id="services"><div class="toolbar"><div><div class="eyebrow">Tailoring services</div><h2>Made for your wardrobe</h2></div><span class="pill">Custom stitching & alteration</span></div><div class="cards" id="servicesGrid"><div class="card"><div class="service-icon">👚</div><h3>Blouse</h3><p class="muted">Custom fit and finishing.</p></div><div class="card"><div class="service-icon">👗</div><h3>Salwar / Kameez</h3><p class="muted">Made to your measurements.</p></div><div class="card"><div class="service-icon">✂️</div><h3>Alteration</h3><p class="muted">Adjustments and repair.</p></div><div class="card"><div class="service-icon">🧵</div><h3>False Par & Peko</h3><p class="muted">Finishing details.</p></div></div><p class="hint">Prices depend on garment, material, finishing and work required. The shop will confirm your quote.</p></section>
-<section class="section" id="shopPayment" hidden><div class="panel layout"><div><div class="eyebrow">Shop details</div><h2 id="publicShopName">Jolly Ladies Tailor</h2><p id="publicShopAddress" class="muted"></p><p>Phone: <a id="publicShopPhone" href="#">To be updated</a></p><p>WhatsApp: <a id="publicShopWhatsApp" href="#">Contact the shop</a></p><p id="publicUpi" class="muted"></p></div><div id="publicQrWrap" class="preview" hidden><h3>Pay via UPI / GPay</h3><img id="publicGpayQr" alt="Shop UPI payment QR code" style="display:block;max-width:230px;width:100%;height:auto;margin:auto"><p class="muted">Please check the payee name before paying.</p></div></div></section>
-<section class="section layout" id="appointment"><div><div class="eyebrow">Get in touch</div><h2>Request a visit</h2><p>Tell us what you need stitched or altered. The shop will contact you to confirm details and timing.</p><div class="card"><h3>Our service list</h3><p>False par · Peko · Blouse · Salwar · Pant · Frock · Lehenga · Alteration · Custom stitching</p><p class="muted">Add the shop phone, address and opening hours in the website configuration before publishing.</p></div></div><div class="panel"><form id="bookingForm"><div class="grid"><div class="field"><label for="name">Your name *</label><input id="name" required maxlength="160" autocomplete="name"></div><div class="field"><label for="phone">Phone number *</label><input id="phone" required maxlength="30" inputmode="tel" autocomplete="tel"></div><div class="field full"><label for="service">Service</label><select id="service"><option>Blouse</option><option>False par</option><option>Peko</option><option>Salwar</option><option>Pant</option><option>Frock</option><option>Lehenga</option><option>Alteration</option><option>Other / Custom</option></select></div><div class="field full"><label for="message">Details (optional)</label><textarea id="message" maxlength="2000" placeholder="Garment, fitting request, preferred visit date..."></textarea></div></div><div class="form-actions"><button class="btn orange" type="submit">Send Request</button></div><div id="bookingNotice" class="notice" hidden></div></form></div></section></main><footer class="footer">© <span id="year"></span> Jolly Ladies Tailor · Made with care.</footer>
-<script src="/js/api.js"></script><script>
-document.getElementById('year').textContent=new Date().getFullYear();
-(async()=>{try{const shop=await API.get('/api/public/shop');if(shop.shop_name){document.querySelectorAll('.brand h1').forEach(el=>el.textContent=shop.shop_name);document.getElementById('publicShopName').textContent=shop.shop_name;document.querySelector('.footer').innerHTML='© '+new Date().getFullYear()+' '+escapeHTML(shop.shop_name)+' · Made with care.';}if(shop.shop_address)document.getElementById('publicShopAddress').textContent=shop.shop_address; if(shop.shop_phone){const p=document.getElementById('publicShopPhone');p.textContent=shop.shop_phone;p.href='tel:'+shop.shop_phone.replace(/[^+0-9]/g,'')}if(shop.whatsapp_number){const w=document.getElementById('publicShopWhatsApp');w.textContent=shop.whatsapp_number;w.href='https://wa.me/'+whatsappDigits(shop.whatsapp_number)}if(shop.upi_id)document.getElementById('publicUpi').textContent='UPI ID: '+shop.upi_id;if(shop.gpayQrUrl){document.getElementById('publicGpayQr').src=shop.gpayQrUrl;document.getElementById('publicQrWrap').hidden=false}document.getElementById('shopPayment').hidden=false}catch(e){console.warn('Shop settings unavailable',e)}})();
-(async()=>{try{const products=await API.get('/api/public/products');if(products.length){const grid=document.getElementById('servicesGrid');grid.innerHTML=products.map((p,i)=>`<article class="card">${p.imageUrl?`<img alt="" src="${escapeHTML(p.imageUrl)}" style="width:100%;height:110px;object-fit:cover;border-radius:12px">`:`<div class="service-icon">${['🧵','👚','👗','✂️','🪡'][i%5]}</div>`}<h3>${escapeHTML(p.name)}</h3><p class="muted">${escapeHTML(p.description||p.category||'Custom tailoring service')}</p></article>`).join('')}}catch(e){console.warn('Catalog is using the starter fallback.',e)}})();
-document.getElementById('bookingForm').addEventListener('submit',async e=>{e.preventDefault();const notice='#bookingNotice';try{await API.post('/api/public/booking-requests',{name:document.getElementById('name').value.trim(),phone:document.getElementById('phone').value.trim(),service:document.getElementById('service').value,message:document.getElementById('message').value.trim()});setNotice(notice,'Request sent. The shop will contact you to confirm.',true);e.target.reset()}catch(err){setNotice(notice,err.message)}});
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jolly Ladies Tailor | Custom Stitching, Blouse, Salwar, Lehenga & Alterations</title>
+  <meta name="description" content="Jolly Ladies Tailor — Kolkata's trusted ladies tailoring specialist for Blouse, Salwar, Pant, Frock, Lehenga, Peko, False Par, and precision alterations.">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+
+<!-- Header Navigation -->
+<header class="topbar">
+  <a class="brand" href="/">
+    <div class="brand-mark">🧵</div>
+    <div>
+      <h1 id="brandName">Jolly Ladies Tailor</h1>
+      <small>MADE TO FIT YOU</small>
+    </div>
+  </a>
+  <nav class="navlinks">
+    <a href="#services">Services</a>
+    <a href="#styles">Style Inspirations</a>
+    <a href="#location">Shop & Payment</a>
+    <a href="#appointment" class="orange">Book a Visit</a>
+    <a href="/tailor.html">Tailor Login</a>
+    <a href="/admin.html">Admin</a>
+  </nav>
+</header>
+
+<main>
+  <!-- Hero Section -->
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Your Fit · Your Style · Your Tailor</div>
+      <h2>Stitched with care.<br>Made to fit you.</h2>
+      <p>
+        From perfectly fitted designer blouses and festive lehengas to everyday salwar kameez, peko, false par, and prompt alterations — Jolly Ladies Tailor crafts garments tailored precisely to your personal measurements and preferences.
+      </p>
+      <div class="form-actions">
+        <a class="btn orange" href="#appointment">📅 Request an Appointment</a>
+        <a class="btn light" href="#services">✨ Explore Our Services</a>
+      </div>
+    </div>
+    <div class="hero-art" aria-label="Jolly Ladies Tailor Tailoring Art">
+      🪡
+      <span style="position:absolute;font-size:14px;bottom:20px;left:20px;color:white;letter-spacing:2px;font-weight:700">
+        CUT • FIT • FINISH
+      </span>
+    </div>
+  </section>
+
+  <!-- Services Grid -->
+  <section class="section" id="services">
+    <div class="toolbar">
+      <div>
+        <div class="eyebrow">Expert Tailoring & Alterations</div>
+        <h2>Specialized Services for Every Occasion</h2>
+      </div>
+      <span class="pill">Custom Made · Perfect Fit</span>
+    </div>
+
+    <div class="cards" id="servicesGrid">
+      <div class="card">
+        <div class="service-icon">👚</div>
+        <h3>Blouse Stitching</h3>
+        <p class="muted">Katori cut, princess cut, boat neck, padded, designer bridal blouses with custom back patterns.</p>
+      </div>
+      <div class="card">
+        <div class="service-icon">👗</div>
+        <h3>Salwar & Suit</h3>
+        <p class="muted">Traditional salwar, churidar, straight pant suit, Patiala, Pakistani suit, and designer kurtis.</p>
+      </div>
+      <div class="card">
+        <div class="service-icon">✨</div>
+        <h3>Lehenga & Gowns</h3>
+        <p class="muted">Flared lehengas, crop tops, Anarkalis, party gowns, and festive evening wear with canvas lining.</p>
+      </div>
+      <div class="card">
+        <div class="service-icon">🧵</div>
+        <h3>False Par & Peko</h3>
+        <p class="muted">Fine peko edging, saree false attachment, falling, and dupatta finishing with matching threads.</p>
+      </div>
+      <div class="card">
+        <div class="service-icon">👖</div>
+        <h3>Ladies Pants & Trousers</h3>
+        <p class="muted">Narrow pants, cigarette trousers, culottes, palazzo, and elasticated comfort waist trousers.</p>
+      </div>
+      <div class="card">
+        <div class="service-icon">🌸</div>
+        <h3>Frocks & Dresses</h3>
+        <p class="muted">Casual Western dresses, A-line frocks, maxi dresses, child party dresses, and jumpsuits.</p>
+      </div>
+      <div class="card">
+        <div class="service-icon">✂️</div>
+        <h3>Precision Alteration</h3>
+        <p class="muted">Waist resizing, length adjustment, shoulder fit, zip replacements, and reshaping readymade garments.</p>
+      </div>
+      <div class="card">
+        <div class="service-icon">🪡</div>
+        <h3>Custom Stitching</h3>
+        <p class="muted">Bring your Pinterest or magazine design. We cut and stitch based on your unique dimensions.</p>
+      </div>
+    </div>
+    <p class="hint">Prices vary based on fabric, lining, handwork, and design complexity. The tailor confirms exact rates during consultation.</p>
+  </section>
+
+  <!-- Style Inspirations -->
+  <section class="section" id="styles">
+    <div class="toolbar">
+      <div>
+        <div class="eyebrow">Design Catalog</div>
+        <h2>Popular Garment Styles</h2>
+      </div>
+      <span class="pill">Inspiration Guide</span>
+    </div>
+    <div class="cards">
+      <div class="card" style="cursor:pointer" onclick="selectServiceForEnquiry('Blouse')">
+        <div class="service-icon">👚</div>
+        <h3>Bridal & Designer Blouses</h3>
+        <p class="muted">Deep back, boat neck, halter neck, elbow sleeve, dori & latkan.</p>
+        <span class="pill" style="margin-top:8px">Book this service →</span>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="selectServiceForEnquiry('Lehenga')">
+        <div class="service-icon">💃</div>
+        <h3>Festive Lehengas</h3>
+        <p class="muted">Kali cutting, heavy can-can attachment, latkan detailing.</p>
+        <span class="pill" style="margin-top:8px">Book this service →</span>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="selectServiceForEnquiry('Salwar')">
+        <div class="service-icon">👗</div>
+        <h3>Salwar & Kurti Sets</h3>
+        <p class="muted">A-line kurtis, straight cut, palazzo suits, churidar styling.</p>
+        <span class="pill" style="margin-top:8px">Book this service →</span>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="selectServiceForEnquiry('Alteration')">
+        <div class="service-icon">✂️</div>
+        <h3>Readymade Alteration</h3>
+        <p class="muted">Resize loose outfits, fix fitting issues, alter hems and sleeves.</p>
+        <span class="pill" style="margin-top:8px">Book this service →</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Shop Location, Contact & GPay QR Section -->
+  <section class="section" id="location">
+    <div class="panel layout">
+      <div>
+        <div class="eyebrow">Shop details & Visiting</div>
+        <h2 id="publicShopName">Jolly Ladies Tailor</h2>
+        <p id="publicShopAddress" class="muted" style="font-size:15px;line-height:1.6">
+          Visit our tailoring boutique for measurements, trials, and fabric consultations.
+        </p>
+        <div style="margin:16px 0;line-height:2">
+          <p>📞 <strong>Phone:</strong> <a id="publicShopPhone" href="#" style="color:var(--violet);font-weight:700">Connecting...</a></p>
+          <p>💬 <strong>WhatsApp:</strong> <a id="publicShopWhatsApp" href="#" target="_blank" rel="noopener" style="color:var(--green);font-weight:700">Chat with Tailor on WhatsApp</a></p>
+          <p id="publicUpi" class="muted" style="font-size:14px"></p>
+        </div>
+        <div class="notice" style="background:#fcf2fa;color:var(--violet)">
+          📍 <strong>Walk-in & Trial Hours:</strong> Monday – Saturday: 10:00 AM – 8:30 PM (Sunday closed or by appointment)
+        </div>
+      </div>
+
+      <div id="publicQrWrap" class="preview" hidden style="text-align:center">
+        <h3 style="margin:0 0 8px 0;color:var(--violet)">Scan & Pay via UPI / GPay</h3>
+        <img id="publicGpayQr" alt="Shop UPI payment QR code" style="display:block;max-width:200px;width:100%;height:auto;margin:12px auto;border-radius:10px;border:1px solid #ddd;padding:6px;background:#fff">
+        <p class="muted" style="margin:6px 0;font-size:12px">
+          Supported: Google Pay, PhonePe, Paytm, BHIM UPI.<br>
+          <em>Please verify the payee name in your UPI app before completing payment.</em>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Appointment / Enquiry Form -->
+  <section class="section layout" id="appointment">
+    <div>
+      <div class="eyebrow">Get in touch</div>
+      <h2>Request an Appointment or Quote</h2>
+      <p>
+        Planning a visit or have a question about tailoring, fabric estimation, or urgent delivery? Submit your request below and our team will contact you.
+      </p>
+      <div class="card" style="margin-top:16px">
+        <h3>Our Core Guarantee</h3>
+        <p>✓ 1-on-1 Personalized body measurement consultation</p>
+        <p>✓ Guaranteed fitting trial before final delivery</p>
+        <p>✓ Digital e-bills sent directly to your WhatsApp</p>
+        <p class="muted">All personal measurements and details are strictly confidential.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <form id="bookingForm">
+        <div class="grid">
+          <div class="field">
+            <label for="name">Your Full Name *</label>
+            <input id="name" required maxlength="160" autocomplete="name" placeholder="e.g. Priya Sharma">
+          </div>
+          <div class="field">
+            <label for="phone">Phone Number (WhatsApp) *</label>
+            <input id="phone" required maxlength="30" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number">
+          </div>
+          <div class="field full">
+            <label for="service">Service Needed</label>
+            <select id="service">
+              <option value="Blouse">Blouse Stitching</option>
+              <option value="Salwar">Salwar / Suit / Kurti</option>
+              <option value="Lehenga">Lehenga / Choli / Gown</option>
+              <option value="Pant">Ladies Pant / Trouser</option>
+              <option value="Frock">Frock / Western Dress</option>
+              <option value="False par">False Par (Saree)</option>
+              <option value="Peko">Peko Edging</option>
+              <option value="Alteration">Garment Alteration</option>
+              <option value="Other / Custom">Other Custom Tailoring</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label for="message">Details & Preferred Date (Optional)</label>
+            <textarea id="message" maxlength="2000" placeholder="Number of garments, fabric type, preferred visit date, trial urgency..."></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn orange" type="submit">Submit Request</button>
+        </div>
+        <div id="bookingNotice" class="notice" hidden></div>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  © <span id="year"></span> <span id="footerBrand">Jolly Ladies Tailor</span> · Made with care for your perfect fit.
+</footer>
+
+<script src="/js/api.js"></script>
+<script>
+document.getElementById('year').textContent = new Date().getFullYear();
+
+function selectServiceForEnquiry(serviceName) {
+  const sel = document.getElementById('service');
+  if (sel) {
+    for (let opt of sel.options) {
+      if (opt.value.toLowerCase().includes(serviceName.toLowerCase())) {
+        sel.value = opt.value;
+        break;
+      }
+    }
+  }
+  document.getElementById('appointment').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Load shop public settings
+(async () => {
+  try {
+    const shop = await API.get('/api/public/shop');
+    if (shop.shop_name) {
+      document.querySelectorAll('#brandName, #publicShopName, #footerBrand').forEach(el => el.textContent = shop.shop_name);
+    }
+    if (shop.shop_address) {
+      document.getElementById('publicShopAddress').textContent = shop.shop_address;
+    }
+    if (shop.shop_phone) {
+      const p = document.getElementById('publicShopPhone');
+      p.textContent = shop.shop_phone;
+      p.href = 'tel:' + shop.shop_phone.replace(/[^+0-9]/g, '');
+    } else {
+      document.getElementById('publicShopPhone').textContent = 'Contact via WhatsApp';
+      document.getElementById('publicShopPhone').href = '#appointment';
+    }
+    if (shop.whatsapp_number) {
+      const w = document.getElementById('publicShopWhatsApp');
+      w.textContent = `+${whatsappDigits(shop.whatsapp_number)} (Click to Chat)`;
+      w.href = 'https://wa.me/' + whatsappDigits(shop.whatsapp_number) + '?text=' + encodeURIComponent('Hello Jolly Ladies Tailor, I would like to enquire about tailoring services.');
+    }
+    if (shop.upi_id) {
+      document.getElementById('publicUpi').textContent = 'UPI ID: ' + shop.upi_id;
+    }
+    if (shop.gpayQrUrl) {
+      document.getElementById('publicGpayQr').src = shop.gpayQrUrl;
+      document.getElementById('publicQrWrap').hidden = false;
+    }
+  } catch (e) {
+    console.warn('Shop profile loaded with standard defaults.', e);
+  }
+})();
+
+// Load dynamic products catalog
+(async () => {
+  try {
+    const products = await API.get('/api/public/products');
+    if (products && products.length > 0) {
+      const grid = document.getElementById('servicesGrid');
+      grid.innerHTML = products.map((p, i) => `
+        <article class="card">
+          ${p.imageUrl
+            ? `<img alt="${escapeHTML(p.name)}" src="${escapeHTML(p.imageUrl)}" style="width:100%;height:140px;object-fit:cover;border-radius:12px;margin-bottom:10px">`
+            : `<div class="service-icon">${['🧵', '👚', '👗', '✂️', '🪡', '💃', '✨', '👖'][i % 8]}</div>`}
+          <h3>${escapeHTML(p.name)}</h3>
+          <p class="muted">${escapeHTML(p.description || p.category || 'Custom tailoring service')}</p>
+          ${Number(p.default_rate) > 0 ? `<div style="margin-top:8px;font-weight:700;color:var(--violet)">Starting from ${money(p.default_rate)}</div>` : ''}
+        </article>
+      `).join('');
+    }
+  } catch (e) {
+    console.warn('Using baseline services grid.');
+  }
+})();
+
+// Handle booking request submission
+document.getElementById('bookingForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const notice = '#bookingNotice';
+  try {
+    const name = document.getElementById('name').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const service = document.getElementById('service').value;
+    const message = document.getElementById('message').value.trim();
+
+    await API.post('/api/public/booking-requests', { name, phone, service, message });
+    setNotice(notice, 'Thank you! Your request has been recorded. The tailor will contact you shortly.', true);
+    e.target.reset();
+  } catch (err) {
+    setNotice(notice, err.message);
+  }
+});
+</script>
+</body>
+</html>

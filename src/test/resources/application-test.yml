@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:jolly_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1;INIT=CREATE DOMAIN IF NOT EXISTS TIMESTAMPTZ AS TIMESTAMP WITH TIME ZONE\;CREATE DOMAIN IF NOT EXISTS JSONB AS CHARACTER LARGE OBJECT
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  flyway:
+    enabled: true
+    clean-disabled: false
+app:
+  bootstrap:
+    admin-username: testadmin
+    admin-password: TestAdminPassword123!
+    tailor-username: testtailor
+    tailor-password: TestTailorPassword123!

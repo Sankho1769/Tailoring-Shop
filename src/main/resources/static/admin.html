@@ -1,15 +1,444 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin Console | Jolly Ladies Tailor</title><link rel="stylesheet" href="/css/site.css"></head><body>
-<header class="topbar"><a class="brand" href="/"><div class="brand-mark">🧵</div><div><h1>Admin Console</h1><small>JOLLY LADIES TAILOR</small></div></a><nav class="navlinks"><a href="/">Consumer Website</a><a href="/tailor.html">Tailor Workspace</a><button id="logout" class="hidden">Log out</button></nav></header><main>
-<section id="loginPanel" class="panel login-wrap"><div class="eyebrow">Owner access</div><h2>Admin login</h2><p class="muted">Manage business statistics, services, categories, staff and customer requests.</p><form id="loginForm"><div class="field"><label for="username">Username</label><input id="username" required autocomplete="username"></div><div class="field" style="margin-top:12px"><label for="password">Password</label><input id="password" type="password" required autocomplete="current-password"></div><div class="form-actions"><button class="btn orange" type="submit">Sign in</button></div><div id="loginNotice" class="notice" hidden></div></form></section>
-<div id="adminApp" class="hidden"><div class="toolbar"><div><div class="eyebrow">Business overview</div><h2 style="font:700 32px Georgia,serif;color:var(--violet);margin:4px 0">Admin Dashboard</h2><p class="muted">Statistics below are calculated from the shared PostgreSQL database.</p></div><div class="field"><label for="range">Report period</label><select id="range"><option value="today">Today</option><option value="7d">Last 7 days</option><option value="month" selected>This month</option><option value="all">All time</option></select></div></div>
-<div id="statsNotice" class="notice" hidden></div>
-<section class="panel section"><h2>Shop profile & GPay QR</h2><p class="muted">These details appear on the consumer website. The QR image is meant to be public so customers can scan it.</p><form id="shopSettingsForm"><div class="grid"><div class="field"><label for="shopName">Shop name</label><input id="shopName" required maxlength="160"></div><div class="field"><label for="shopPhone">Phone</label><input id="shopPhone" maxlength="30"></div><div class="field full"><label for="shopAddress">Shop address</label><textarea id="shopAddress" rows="2" maxlength="1000"></textarea></div><div class="field"><label for="shopWhatsapp">WhatsApp number (country code, digits only)</label><input id="shopWhatsapp" maxlength="30" placeholder="91XXXXXXXXXX"></div><div class="field"><label for="shopUpi">UPI ID (optional)</label><input id="shopUpi" maxlength="120" placeholder="name@bank"></div><div class="field full"><label for="shopQr">GPay / UPI QR image</label><input id="shopQr" type="file" accept="image/png,image/jpeg,image/webp"></div></div><div class="form-actions"><button class="btn orange" type="submit">Save shop details</button><button id="uploadShopQr" class="btn ghost" type="button">Upload QR image</button></div><div id="shopNotice" class="notice" hidden></div><img id="shopQrPreview" class="hidden" alt="GPay QR preview" style="max-width:220px;margin-top:12px;border:1px solid var(--line);padding:8px;border-radius:10px;background:#fff"></form></section>
-<div class="stats"><div class="stat"><span>Sales billed</span><strong id="statBilled">₹0.00</strong></div><div class="stat"><span>Payments received</span><strong id="statCollected">₹0.00</strong></div><div class="stat"><span>Outstanding balance</span><strong id="statDue">₹0.00</strong></div><div class="stat"><span>Orders in period</span><strong id="statOrders">0</strong></div><div class="stat"><span>Total customers</span><strong id="statCustomers">0</strong></div><div class="stat"><span>Active services</span><strong id="statProducts">0</strong></div><div class="stat"><span>New consumer enquiries</span><strong id="statRequests">0</strong></div><div class="stat"><span>Average bill</span><strong id="statAverage">₹0.00</strong></div></div>
-<section class="panel section"><div class="toolbar"><div><h2 style="margin:0">Sales — last 7 days</h2><p class="muted">Billed order value by day.</p></div><button class="btn ghost" id="exportStats">Export visible statistics CSV</button></div><div id="salesChart" style="display:grid;gap:10px"></div></section>
-<div class="layout section"><section class="panel"><h2>Top services</h2><div class="table-wrap"><table><thead><tr><th>Service</th><th>Quantity</th><th>Revenue</th></tr></thead><tbody id="topServicesRows"></tbody></table></div></section><section class="panel"><h2>Payment methods</h2><div class="table-wrap"><table><thead><tr><th>Method</th><th>Transactions</th><th>Collected</th></tr></thead><tbody id="paymentMethodsRows"></tbody></table></div></section></div>
-<section class="panel section"><h2>Recent orders</h2><div class="table-wrap"><table><thead><tr><th>Bill No.</th><th>Customer</th><th>Status</th><th>Total</th><th>Paid</th><th>Due</th></tr></thead><tbody id="recentOrdersRows"></tbody></table></div></section>
-<div class="layout"><section class="panel"><div class="toolbar"><h2 style="margin:0">Products & services</h2><button id="refreshProducts" class="btn ghost">Refresh</button></div><form id="productForm"><div class="grid"><div class="field"><label for="pName">Name *</label><input id="pName" required maxlength="140"></div><div class="field"><label for="pCategory">Category</label><select id="pCategory"></select></div><div class="field"><label for="pRate">Default rate (₹)</label><input id="pRate" type="number" min="0" step="0.01" value="0"></div><div class="field"><label for="pDescription">Description</label><input id="pDescription" maxlength="500"></div></div><div class="form-actions"><button class="btn orange" type="submit">Add product / service</button></div><div id="productNotice" class="notice" hidden></div></form><div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Service</th><th>Category</th><th>Rate</th><th>Active</th><th>Image</th><th>Actions</th></tr></thead><tbody id="productsRows"></tbody></table></div></section>
-<section class="panel"><h2>Categories</h2><form id="categoryForm"><div class="field"><label for="categoryName">New category</label><input id="categoryName" required maxlength="100" placeholder="e.g. Bridal wear"></div><div class="field" style="margin-top:10px"><label for="categoryDescription">Description</label><input id="categoryDescription" maxlength="500"></div><div class="form-actions"><button class="btn" type="submit">Add category</button></div><div id="categoryNotice" class="notice" hidden></div></form><div id="categoriesList" style="display:grid;gap:8px;margin-top:14px"></div><div class="divider-title">Catalog image storage</div><p class="muted">Product images are uploaded to the configured Supabase Storage bucket through the Java backend. Keep that bucket for public catalog images only; do not put customer measurements or private customer photos in a public bucket.</p></section></div>
-<section class="panel section"><div class="toolbar"><h2 style="margin:0">Consumer enquiries</h2><button id="refreshRequests" class="btn ghost">Refresh enquiries</button></div><div class="table-wrap"><table><thead><tr><th>Name</th><th>Phone</th><th>Service</th><th>Message</th><th>Date</th><th>Status</th></tr></thead><tbody id="requestsRows"></tbody></table></div></section>
-<section class="panel section"><h2>Staff accounts</h2><p class="muted">Create login accounts for Tailor or Admin. Use a unique password of at least 12 characters.</p><form id="userForm"><div class="grid"><div class="field"><label for="uName">Username</label><input id="uName" required maxlength="80"></div><div class="field"><label for="uRole">Role</label><select id="uRole"><option>TAILOR</option><option>ADMIN</option></select></div><div class="field full"><label for="uPassword">Temporary password (minimum 12 characters)</label><input id="uPassword" type="password" minlength="12" required autocomplete="new-password"></div></div><div class="form-actions"><button class="btn" type="submit">Create account</button></div><div id="userNotice" class="notice" hidden></div></form><div id="usersList" style="display:grid;gap:8px;margin-top:14px"></div></section></div></main><footer class="footer">Admin actions affect the shared shop database. Use strong staff passwords and keep backups.</footer>
-<script src="/js/api.js"></script><script src="/js/admin.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Console | Jolly Ladies Tailor</title>
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">
+    <div class="brand-mark">🧵</div>
+    <div>
+      <h1>Admin Console</h1>
+      <small>JOLLY LADIES TAILOR</small>
+    </div>
+  </a>
+  <nav class="navlinks">
+    <a href="/">Consumer Website</a>
+    <a href="/tailor.html">Tailor Workspace</a>
+    <button id="logout" class="hidden" type="button">Log out</button>
+  </nav>
+</header>
+
+<main>
+  <!-- Login Panel -->
+  <section id="loginPanel" class="panel login-wrap">
+    <div class="eyebrow">Owner access</div>
+    <h2>Admin login</h2>
+    <p class="muted">Manage business analytics, staff, services, customers, payments, and shop settings.</p>
+    <form id="loginForm">
+      <div class="field">
+        <label for="username">Admin Username</label>
+        <input id="username" required autocomplete="username">
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label for="password">Admin Password</label>
+        <input id="password" type="password" required autocomplete="current-password">
+      </div>
+      <div class="form-actions">
+        <button class="btn orange" type="submit">Sign in to Admin</button>
+      </div>
+      <div id="loginNotice" class="notice" hidden></div>
+    </form>
+  </section>
+
+  <!-- Admin Application -->
+  <div id="adminApp" class="hidden">
+    <!-- Dashboard Header -->
+    <div class="toolbar">
+      <div>
+        <div class="eyebrow">Business overview</div>
+        <h2 style="font:700 32px Georgia,serif;color:var(--violet);margin:4px 0">Admin Dashboard</h2>
+        <p class="muted">Live operational metrics and reporting calculated directly from PostgreSQL.</p>
+      </div>
+      <div class="field" style="max-width:200px">
+        <label for="range">Reporting Period</label>
+        <select id="range">
+          <option value="today">Today</option>
+          <option value="7d">Last 7 days</option>
+          <option value="month" selected>This month</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="statsNotice" class="notice" hidden></div>
+
+    <!-- KPI Metric Cards -->
+    <div class="stats">
+      <div class="stat">
+        <span>Sales Billed</span>
+        <strong id="statBilled">₹0.00</strong>
+      </div>
+      <div class="stat">
+        <span>Payments Received</span>
+        <strong id="statCollected">₹0.00</strong>
+      </div>
+      <div class="stat">
+        <span>Outstanding Balance</span>
+        <strong id="statDue" style="color:var(--orange)">₹0.00</strong>
+      </div>
+      <div class="stat">
+        <span>Total Orders</span>
+        <strong id="statOrders">0</strong>
+      </div>
+      <div class="stat">
+        <span>Total Customers</span>
+        <strong id="statCustomers">0</strong>
+      </div>
+      <div class="stat">
+        <span>Active Services</span>
+        <strong id="statProducts">0</strong>
+      </div>
+      <div class="stat">
+        <span>New Enquiries</span>
+        <strong id="statRequests">0</strong>
+      </div>
+      <div class="stat">
+        <span>Average Order Value</span>
+        <strong id="statAverage">₹0.00</strong>
+      </div>
+    </div>
+
+    <!-- Sales Chart & CSV Export Actions -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Sales Trend — Last 7 Days</h2>
+          <p class="muted">Daily order billing totals.</p>
+        </div>
+        <div class="form-actions" style="margin:0">
+          <button class="btn ghost" id="exportStats" type="button">📊 Export Summary CSV</button>
+          <a class="btn ghost" href="/api/admin/reports/orders-csv" download>📄 Export All Orders (CSV)</a>
+          <a class="btn ghost" href="/api/admin/reports/payments-csv" download>💰 Export Payments (CSV)</a>
+          <a class="btn ghost" href="/api/admin/reports/customers-csv" download>👥 Export Customers (CSV)</a>
+        </div>
+      </div>
+      <div id="salesChart" style="display:grid;gap:10px;margin-top:12px"></div>
+    </section>
+
+    <!-- Top Services & Payment Breakdown -->
+    <div class="layout section">
+      <section class="panel">
+        <h2>Top Stitching Services</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Service Name</th>
+                <th>Quantity</th>
+                <th>Revenue</th>
+              </tr>
+            </thead>
+            <tbody id="topServicesRows">
+              <tr><td colspan="3">Loading services...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Collections by Payment Method</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Payment Method</th>
+                <th>Transactions</th>
+                <th>Total Collected</th>
+              </tr>
+            </thead>
+            <tbody id="paymentMethodsRows">
+              <tr><td colspan="3">Loading methods...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- Customer Search and Order History -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Customer Directory & Order History</h2>
+          <p class="muted">Search customer records, lifetime billing, and order histories.</p>
+        </div>
+        <div class="field" style="min-width:280px">
+          <input id="adminCustomerSearch" placeholder="Search customer by name or phone...">
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Customer Name</th>
+              <th>Phone</th>
+              <th>Total Orders</th>
+              <th>Total Spent</th>
+              <th>Total Due</th>
+              <th>Last Order</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="adminCustomersRows">
+            <tr><td colspan="7">Loading customer directory...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Customer Order History Detail Box -->
+      <div id="adminCustomerOrdersDetail" class="panel hidden" style="margin-top:16px;background:#fff8fd;border:1px solid var(--pink)">
+        <div class="toolbar">
+          <h3 id="adminCustomerDetailTitle" style="margin:0;color:var(--violet)">Customer Order History</h3>
+          <button id="closeCustomerOrders" class="btn ghost" type="button">Close</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead>
+              <tr>
+                <th>Bill No.</th>
+                <th>Status</th>
+                <th>Payment Status</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Due</th>
+                <th>Promised Delivery</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="adminCustomerOrdersRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Payment History / Ledger Log -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Payment Ledger & Transactions</h2>
+          <p class="muted">All verified payments and refunds recorded across tailor sessions.</p>
+        </div>
+        <div class="field" style="min-width:260px">
+          <input id="adminPaymentSearch" placeholder="Search by bill, customer, or UPI ref...">
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Bill No.</th>
+              <th>Customer</th>
+              <th>Amount</th>
+              <th>Type</th>
+              <th>Method</th>
+              <th>Reference / Note</th>
+              <th>Received By</th>
+            </tr>
+          </thead>
+          <tbody id="adminPaymentsRows">
+            <tr><td colspan="8">Loading transactions...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Shop Settings & GPay QR -->
+    <section class="panel section">
+      <h2>Shop Details & GPay QR Code</h2>
+      <p class="muted">Update shop information, contact details, and the Google Pay QR code for customer scan.</p>
+      <form id="shopSettingsForm">
+        <div class="grid">
+          <div class="field">
+            <label for="shopName">Shop Name</label>
+            <input id="shopName" required maxlength="160">
+          </div>
+          <div class="field">
+            <label for="shopPhone">Phone Number</label>
+            <input id="shopPhone" maxlength="30" placeholder="+91 98300 XXXXX">
+          </div>
+          <div class="field full">
+            <label for="shopAddress">Shop Address & Directions</label>
+            <textarea id="shopAddress" rows="2" maxlength="1000" placeholder="Shop address, market location, Kolkata"></textarea>
+          </div>
+          <div class="field">
+            <label for="shopWhatsapp">WhatsApp Number (e.g. 919830012345)</label>
+            <input id="shopWhatsapp" maxlength="30" placeholder="91XXXXXXXXXX">
+          </div>
+          <div class="field">
+            <label for="shopUpi">UPI Payment ID</label>
+            <input id="shopUpi" maxlength="120" placeholder="jollytailor@okaxis">
+          </div>
+          <div class="field full">
+            <label for="shopQr">GPay / PhonePe / UPI QR Image</label>
+            <input id="shopQr" type="file" accept="image/png,image/jpeg,image/webp">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn orange" type="submit">Save Shop Details</button>
+          <button id="uploadShopQr" class="btn ghost" type="button">Upload GPay QR</button>
+        </div>
+        <div id="shopNotice" class="notice" hidden></div>
+        <img id="shopQrPreview" class="hidden" alt="GPay QR preview" style="max-width:200px;margin-top:12px;border:1px solid var(--line);padding:8px;border-radius:10px;background:#fff">
+      </form>
+    </section>
+
+    <!-- Products & Categories Management -->
+    <div class="layout section">
+      <section class="panel">
+        <div class="toolbar">
+          <h2 style="margin:0">Services & Pricing</h2>
+          <button id="refreshProducts" class="btn ghost" type="button">Refresh</button>
+        </div>
+        <form id="productForm">
+          <div class="grid">
+            <div class="field">
+              <label for="pName">Service Name *</label>
+              <input id="pName" required maxlength="140" placeholder="e.g. Bridal Blouse, Anarkali">
+            </div>
+            <div class="field">
+              <label for="pCategory">Category</label>
+              <select id="pCategory"></select>
+            </div>
+            <div class="field">
+              <label for="pRate">Default Stitching Rate (₹)</label>
+              <input id="pRate" type="number" min="0" step="0.01" value="0">
+            </div>
+            <div class="field">
+              <label for="pDescription">Description</label>
+              <input id="pDescription" maxlength="500" placeholder="Finishing details, delivery days">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn orange" type="submit">Add Service</button>
+          </div>
+          <div id="productNotice" class="notice" hidden></div>
+        </form>
+
+        <div class="table-wrap" style="margin-top:14px">
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Category</th>
+                <th>Rate</th>
+                <th>Status</th>
+                <th>Image</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="productsRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Garment Categories</h2>
+        <form id="categoryForm">
+          <div class="field">
+            <label for="categoryName">Category Name *</label>
+            <input id="categoryName" required maxlength="100" placeholder="e.g. Stitching, Alteration, Finishing">
+          </div>
+          <div class="field" style="margin-top:10px">
+            <label for="categoryDescription">Description</label>
+            <input id="categoryDescription" maxlength="500" placeholder="Category description">
+          </div>
+          <div class="form-actions">
+            <button class="btn" type="submit">Add Category</button>
+          </div>
+          <div id="categoryNotice" class="notice" hidden></div>
+        </form>
+        <div id="categoriesList" style="display:grid;gap:8px;margin-top:14px"></div>
+
+        <div class="divider-title">Supabase Storage Configuration</div>
+        <p class="muted">Catalog images are uploaded securely to Supabase Storage via backend S3 credentials. Only public product photos and the public QR code should be uploaded.</p>
+      </section>
+    </div>
+
+    <!-- Consumer Enquiries -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Consumer Website Enquiries</h2>
+          <p class="muted">Requests submitted by visitors on the public homepage.</p>
+        </div>
+        <button id="refreshRequests" class="btn ghost" type="button">Refresh Enquiries</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Customer Name</th>
+              <th>Phone</th>
+              <th>Requested Service</th>
+              <th>Message</th>
+              <th>Received Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="requestsRows">
+            <tr><td colspan="6">Loading enquiries...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Staff Accounts & Roles -->
+    <section class="panel section">
+      <h2>Staff Accounts & Access Roles</h2>
+      <p class="muted">Manage user logins for Tailor workspace and Admin console. Passwords must be at least 12 characters.</p>
+      <form id="userForm">
+        <div class="grid">
+          <div class="field">
+            <label for="uName">Staff Username *</label>
+            <input id="uName" required maxlength="80" autocomplete="off" placeholder="e.g. tailor1, master_tailor">
+          </div>
+          <div class="field">
+            <label for="uRole">Access Role</label>
+            <select id="uRole">
+              <option value="TAILOR">TAILOR (Workspace & Billing)</option>
+              <option value="ADMIN">ADMIN (Full Console Access)</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label for="uPassword">Temporary Password (minimum 12 characters) *</label>
+            <input id="uPassword" type="password" minlength="12" required autocomplete="new-password" placeholder="At least 12 characters">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit">Create Staff Account</button>
+        </div>
+        <div id="userNotice" class="notice" hidden></div>
+      </form>
+      <div id="usersList" style="display:grid;gap:10px;margin-top:16px"></div>
+    </section>
+
+    <!-- PostgreSQL Backup Procedures -->
+    <section class="panel section">
+      <h2>PostgreSQL Database Backup & Recovery Procedure</h2>
+      <p class="muted">Regular database backups ensure customer measurements and billing records are never lost.</p>
+      <div style="background:#f9f5fa;padding:16px;border-radius:10px;font-family:monospace;font-size:13px;line-height:1.6">
+        <strong>1. Create Encrypted/Compressed PostgreSQL Backup:</strong><br>
+        <code>pg_dump -h localhost -p 5432 -U jolly_app -d jolly_tailor -F c -b -v -f "jolly_tailor_backup_%date:~-4,4%%date:~-7,2%%date:~-10,2%.dump"</code><br><br>
+        <strong>2. Restore PostgreSQL Backup:</strong><br>
+        <code>pg_restore -h localhost -p 5432 -U jolly_app -d jolly_tailor -v -c "jolly_tailor_backup.dump"</code><br><br>
+        <strong>3. Docker Local Backup Command:</strong><br>
+        <code>docker compose exec -T postgres pg_dump -U jolly_app -d jolly_tailor &gt; backup.sql</code>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  Admin actions affect the shared PostgreSQL database. Use strong passwords and keep routine backups.
+</footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>

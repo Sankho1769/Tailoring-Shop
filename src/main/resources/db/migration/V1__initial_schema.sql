@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS measurements (
   customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   garment_type VARCHAR(100) NOT NULL,
   unit VARCHAR(10) NOT NULL DEFAULT 'in',
-  dimensions JSONB NOT NULL DEFAULT '{}'::jsonb,
+  dimensions JSONB NOT NULL DEFAULT '{}',
   fit_preference VARCHAR(100),
   notes TEXT,
   created_by BIGINT REFERENCES app_users(id),
