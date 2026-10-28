@@ -2,17 +2,22 @@ package com.jollytailor.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jollytailor.service.InvoicePdfService;
 import com.jollytailor.service.StorageService;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
@@ -21,11 +26,29 @@ public class TailorController {
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final StorageService storage;
+    private final InvoicePdfService pdfService;
 
-    public TailorController(JdbcTemplate jdbc, ObjectMapper mapper, StorageService storage) {
+    public TailorController(JdbcTemplate jdbc, ObjectMapper mapper, StorageService storage, InvoicePdfService pdfService) {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.storage = storage;
+        this.pdfService = pdfService;
+    }
+
+    public static String normalizePhone(String raw) {
+        if (raw == null) return "";
+        try {
+            raw = java.net.URLDecoder.decode(raw, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+        }
+        String trimmed = raw.trim();
+        String digits = trimmed.replaceAll("[^0-9]", "");
+        if (digits.startsWith("91") && digits.length() > 10) {
+            digits = digits.substring(2);
+        } else if (digits.startsWith("0") && digits.length() > 10) {
+            digits = digits.substring(1);
+        }
+        return digits.isEmpty() ? trimmed.replaceAll("[^0-9+]", "") : digits;
     }
 
     @GetMapping("/payment-qr")
@@ -38,13 +61,17 @@ public class TailorController {
         out.put("shopName", settings.getOrDefault("shop_name", "Jolly Ladies Tailor"));
         out.put("shopAddress", settings.getOrDefault("shop_address", ""));
         out.put("shopPhone", settings.getOrDefault("shop_phone", ""));
-        out.put("upiId", settings.getOrDefault("upi_id", ""));
+        String upi = settings.get("upi_id");
+        if (upi == null || upi.isBlank() || upi.equalsIgnoreCase("jollytailor@okaxis")) {
+            upi = "jollybanerjee2021@oksbi";
+        }
+        out.put("upiId", upi);
         out.put("adminNotificationPhone", settings.getOrDefault("admin_notification_phone", ""));
         String qrKey = settings.get("gpay_qr_key");
         if (qrKey != null && !qrKey.isBlank()) {
             out.put("gpayQrUrl", storage.publicUrl(qrKey));
         } else {
-            out.put("gpayQrUrl", null);
+            out.put("gpayQrUrl", "/images/jolly-ladies-tailor-qr.jpg");
         }
         return out;
     }
@@ -55,7 +82,9 @@ public class TailorController {
             return jdbc.queryForList("SELECT id, name, phone, address, notes, created_at, updated_at FROM customers ORDER BY updated_at DESC LIMIT 300");
         }
         String term = "%" + q.trim() + "%";
-        return jdbc.queryForList("SELECT id, name, phone, address, notes, created_at, updated_at FROM customers WHERE name ILIKE ? OR phone ILIKE ? ORDER BY updated_at DESC LIMIT 100", term, term);
+        String norm = normalizePhone(q);
+        String normTerm = norm.isBlank() ? term : "%" + norm + "%";
+        return jdbc.queryForList("SELECT id, name, phone, address, notes, created_at, updated_at FROM customers WHERE name ILIKE ? OR phone ILIKE ? OR phone ILIKE ? ORDER BY updated_at DESC LIMIT 100", term, term, normTerm);
     }
 
     @PostMapping("/customers")
@@ -67,17 +96,32 @@ public class TailorController {
         if (name.isBlank() || phone.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Customer name and phone number are required");
         }
-        String cleanPhone = phone.replaceAll("[^0-9+]", "");
-        if (cleanPhone.length() < 7) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please provide a valid phone number");
+        if (name.length() > 160) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Customer name must not exceed 160 characters");
         }
+        String cleanPhone = normalizePhone(phone);
+        String rawDigits = phone.replaceAll("[^0-9]", "");
+        if (rawDigits.length() < 7) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Please provide a valid phone number (at least 7 digits)");
+        }
+
+        // Safe duplicate customer check:
+        // If an existing customer has the SAME name AND the SAME phone, reject as duplicate
+        var duplicates = jdbc.queryForList(
+                "SELECT id, name, phone FROM customers WHERE (phone=? OR phone=?) AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1",
+                cleanPhone, phone.trim(), name.trim());
+        if (!duplicates.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Customer '" + name.trim() + "' is already registered with phone " + cleanPhone + ". Please select the existing customer.");
+        }
+
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO customers(id, name, phone, address, notes) VALUES(?,?,?,?,?)",
                 id, name, cleanPhone, blank(text(b, "address")), blank(text(b, "notes")));
         return getCustomer(id);
     }
 
-    @PatchMapping("/customers/{id}")
+    @RequestMapping(value = "/customers/{id}", method = {RequestMethod.PATCH, RequestMethod.PUT})
     @Transactional
     public Map<String,Object> updateCustomer(@PathVariable UUID id, @RequestBody Map<String,Object> b) {
         String name = text(b, "name");
@@ -85,7 +129,10 @@ public class TailorController {
         if (name.isBlank() || phone.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Customer name and phone number are required");
         }
-        String cleanPhone = phone.replaceAll("[^0-9+]", "");
+        if (name.length() > 160) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Customer name must not exceed 160 characters");
+        }
+        String cleanPhone = normalizePhone(phone);
         int n = jdbc.update("UPDATE customers SET name=?, phone=?, address=?, notes=?, updated_at=NOW() WHERE id=?",
                 name, cleanPhone, blank(text(b, "address")), blank(text(b, "notes")), id);
         if (n == 0) {
@@ -101,14 +148,28 @@ public class TailorController {
 
     @GetMapping("/customers/by-phone")
     public Map<String,Object> customerByPhone(@RequestParam String phone) {
-        String cleanPhone = phone.replaceAll("[^0-9+]", "");
+        String cleanPhone = normalizePhone(phone);
+        String raw = phone.trim();
+        String digits = phone.replaceAll("[^0-9]", "");
         var rows = jdbc.queryForList(
-                "SELECT id, name, phone, address, notes, created_at, updated_at FROM customers WHERE phone=? OR phone=? LIMIT 1",
-                cleanPhone, phone.trim());
+                "SELECT id, name, phone, address, notes, created_at, updated_at FROM customers " +
+                "WHERE phone=? OR phone=? OR phone LIKE ? OR ? LIKE CONCAT('%', phone) " +
+                "ORDER BY updated_at DESC LIMIT 1",
+                cleanPhone, raw, "%" + cleanPhone, digits);
         if (rows.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found with this phone number");
         }
         return rows.get(0);
+    }
+
+    @GetMapping(value = "/orders/{id}/pdf", produces = "application/pdf")
+    public ResponseEntity<byte[]> downloadInvoicePdf(@PathVariable UUID id) {
+        byte[] pdf = pdfService.generateInvoicePdf(id);
+        String orderNum = jdbc.queryForObject("SELECT order_number FROM tailoring_orders WHERE id=?", String.class, id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoice-" + orderNum + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 
     @GetMapping("/customers/{id}/orders")
@@ -406,6 +467,125 @@ public class TailorController {
         }
 
         UUID customerId = (UUID) existing.get("customer_id");
+        long uid = currentUserId(auth);
+
+        // Update items and recalculate totals if items provided
+        if (b.containsKey("items") && b.get("items") instanceof List<?> itemList && !itemList.isEmpty()) {
+            BigDecimal subtotal = BigDecimal.ZERO;
+            List<Map<String,Object>> prepared = new ArrayList<>();
+
+            for (Object item : itemList) {
+                if (!(item instanceof Map<?,?> m)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid bill item format");
+                }
+                String name = String.valueOf(itemValue(m, "name", "")).trim();
+                if (name.isBlank()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item name is required");
+                }
+                int qty;
+                BigDecimal unitRate;
+                try {
+                    qty = Integer.parseInt(String.valueOf(itemValue(m, "quantity", 1)));
+                    Object rateObj = m.containsKey("unitRate") ? m.get("unitRate") : itemValue(m, "rate", 0);
+                    unitRate = new BigDecimal(String.valueOf(rateObj));
+                } catch (Exception ex) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid quantity or rate");
+                }
+                if (qty < 1 || unitRate.signum() < 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Quantity must be positive and rate cannot be negative");
+                }
+
+                BigDecimal itemDiscount = BigDecimal.ZERO;
+                if (m.containsKey("discount") && m.get("discount") != null && !m.get("discount").toString().isBlank()) {
+                    itemDiscount = decimal(m.get("discount"));
+                    if (itemDiscount.signum() < 0) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item discount cannot be negative");
+                    }
+                }
+                BigDecimal lineGross = unitRate.multiply(BigDecimal.valueOf(qty));
+                if (itemDiscount.compareTo(lineGross) > 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Item discount cannot exceed line total");
+                }
+                BigDecimal amount = lineGross.subtract(itemDiscount);
+                subtotal = subtotal.add(amount);
+
+                String productIdStr = m.get("productId") == null ? "" : String.valueOf(m.get("productId")).trim();
+                UUID prodId = null;
+                BigDecimal defaultRate = null;
+                if (!productIdStr.isBlank()) {
+                    try {
+                        prodId = UUID.fromString(productIdStr);
+                        var pRows = jdbc.queryForList("SELECT id, name, default_rate FROM products WHERE id=?", prodId);
+                        if (!pRows.isEmpty() && pRows.get(0).get("default_rate") != null) {
+                            defaultRate = (BigDecimal) pRows.get(0).get("default_rate");
+                        }
+                    } catch (Exception ignored) {}
+                }
+                if (defaultRate == null) {
+                    if (m.containsKey("defaultRate") && m.get("defaultRate") != null && !m.get("defaultRate").toString().isBlank()) {
+                        defaultRate = decimal(m.get("defaultRate"));
+                    } else {
+                        defaultRate = unitRate;
+                    }
+                }
+
+                String reason = null;
+                Long adjustedBy = null;
+                OffsetDateTime adjustedAt = null;
+                if (unitRate.compareTo(defaultRate) != 0) {
+                    adjustedBy = uid > 0 ? uid : null;
+                    adjustedAt = OffsetDateTime.now(ZoneOffset.UTC);
+                    Object rObj = m.get("adjustmentReason");
+                    reason = rObj != null ? String.valueOf(rObj).trim() : "";
+                    if (reason.isBlank()) {
+                        reason = "Price adjusted by tailor";
+                    }
+                }
+
+                Map<String,Object> pMap = new HashMap<>();
+                pMap.put("name", name);
+                pMap.put("quantity", qty);
+                pMap.put("defaultRate", defaultRate);
+                pMap.put("unitRate", unitRate);
+                pMap.put("discount", itemDiscount);
+                pMap.put("amount", amount);
+                pMap.put("productId", prodId);
+                pMap.put("adjustmentReason", reason);
+                pMap.put("adjustedBy", adjustedBy);
+                pMap.put("adjustedAt", adjustedAt);
+                prepared.add(pMap);
+            }
+
+            BigDecimal discount = b.containsKey("discount") ? decimal(b.get("discount")) : BigDecimal.ZERO;
+            if (discount.signum() < 0 || discount.compareTo(subtotal) > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid discount amount");
+            }
+            BigDecimal total = subtotal.subtract(discount);
+
+            // Reconcile amount already recorded in payments table
+            BigDecimal recordedPaid = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(CASE WHEN payment_type='PAYMENT' THEN amount ELSE -amount END), 0) FROM payments WHERE order_id=?",
+                BigDecimal.class, id);
+            if (recordedPaid == null || recordedPaid.signum() < 0) {
+                recordedPaid = BigDecimal.ZERO;
+            }
+
+            String paymentStatus = total.signum() == 0 || recordedPaid.compareTo(total) >= 0 ? "PAID"
+                    : (recordedPaid.signum() > 0 ? "PARTIALLY_PAID" : "PAYMENT_DUE");
+
+            jdbc.update("UPDATE tailoring_orders SET subtotal=?, discount=?, total=?, amount_paid=?, payment_status=?, updated_at=NOW() WHERE id=?",
+                    subtotal, discount, total, recordedPaid, paymentStatus, id);
+
+            // Replace order items
+            jdbc.update("DELETE FROM order_items WHERE order_id=?", id);
+            for (Map<String,Object> item : prepared) {
+                jdbc.update("INSERT INTO order_items(id, order_id, product_id, item_name, quantity, default_rate, unit_rate, discount, amount, adjustment_reason, adjusted_by, adjusted_at) " +
+                            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                        UUID.randomUUID(), id, item.get("productId"), item.get("name"), item.get("quantity"),
+                        item.get("defaultRate"), item.get("unitRate"), item.get("discount"), item.get("amount"),
+                        item.get("adjustmentReason"), item.get("adjustedBy"), item.get("adjustedAt"));
+            }
+        }
 
         if (b.containsKey("notes")) {
             jdbc.update("UPDATE tailoring_orders SET notes=?, updated_at=NOW() WHERE id=?", blank(text(b, "notes")), id);
@@ -529,19 +709,57 @@ public class TailorController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Payment of ₹" + amount + " exceeds outstanding balance of ₹" + due);
         }
 
+        // Idempotency and rapid double-submission check
+        String idempotencyKey = text(b, "idempotencyKey");
+        if (!idempotencyKey.isBlank()) {
+            var existingWithKey = jdbc.queryForList(
+                "SELECT id, order_id, amount, method, reference, note, payment_type, received_at FROM payments WHERE order_id=? AND reference=?",
+                id, "IDEMP:" + idempotencyKey);
+            if (!existingWithKey.isEmpty()) {
+                Map<String,Object> res = new HashMap<>(existingWithKey.get(0));
+                res.put("order", order(id));
+                return res;
+            }
+        }
+
+        var recentPayments = jdbc.queryForList(
+            "SELECT id, amount, method, received_at FROM payments WHERE order_id=? ORDER BY received_at DESC LIMIT 1", id);
+        if (!recentPayments.isEmpty()) {
+            var last = recentPayments.get(0);
+            BigDecimal lastAmt = (BigDecimal) last.get("amount");
+            String lastMethod = String.valueOf(last.get("method"));
+            Object recAt = last.get("received_at");
+            if (lastAmt.compareTo(amount) == 0 && lastMethod.equalsIgnoreCase(method) && recAt != null) {
+                Instant lastTime = recAt instanceof java.sql.Timestamp ts ? ts.toInstant()
+                        : (recAt instanceof OffsetDateTime odt ? odt.toInstant() : null);
+                if (lastTime != null && Instant.now().minusSeconds(3).isBefore(lastTime)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Duplicate payment detected. This payment was already recorded.");
+                }
+            }
+        }
+
         BigDecimal newPaid = paid.add(amount);
         String paymentStatus = newPaid.compareTo(total) >= 0 ? "PAID" : "PARTIALLY_PAID";
 
         UUID pid = UUID.randomUUID();
         long uid = currentUserId(auth);
+        String ref = blank(text(b, "reference"));
+        if (!idempotencyKey.isBlank() && ref == null) {
+            ref = "IDEMP:" + idempotencyKey;
+        }
+
         jdbc.update("INSERT INTO payments(id, order_id, amount, method, reference, note, payment_type, received_by) " +
                     "VALUES(?,?,?,?,?,?,?,?)",
-                pid, id, amount, method, blank(text(b, "reference")), blank(text(b, "note")), "PAYMENT", uid);
+                pid, id, amount, method, ref, blank(text(b, "note")), "PAYMENT", uid);
 
         jdbc.update("UPDATE tailoring_orders SET amount_paid=?, payment_status=?, updated_at=NOW() WHERE id=?",
                 newPaid, paymentStatus, id);
 
-        return jdbc.queryForMap("SELECT id, order_id, amount, method, reference, note, payment_type, received_at FROM payments WHERE id=?", pid);
+        Map<String,Object> payMap = jdbc.queryForMap(
+            "SELECT id, order_id, amount, method, reference, note, payment_type, received_at FROM payments WHERE id=?", pid);
+        Map<String,Object> out = new HashMap<>(payMap);
+        out.put("order", order(id));
+        return out;
     }
 
     @PostMapping("/orders/{id}/refunds")

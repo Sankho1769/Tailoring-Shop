@@ -341,4 +341,185 @@ class OrderAndBillingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == '" + prodId + "')].stock_quantity").value(5));
     }
+
+    @Test
+    @DisplayName("Editing Order Items: Replace items and recalculate totals via PATCH without creating duplicate orders")
+    @WithMockUser(username = "testtailor", roles = {"TAILOR"})
+    void testOrderEditingWithItemReplacementWithoutDuplicates() throws Exception {
+        // 1. Create Customer
+        String custRes = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Rupa Roy", "phone", "9831998877"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(custRes, Map.class).get("id");
+
+        // 2. Create initial order with 1 item: Blouse Stitching (₹400)
+        String orderRes = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", customerId,
+                                "items", List.of(Map.of("name", "Blouse Stitching", "quantity", 1, "rate", 400.00))
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.total", is(400.0)))
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+        Map<?,?> orderMap = mapper.readValue(orderRes, Map.class);
+        String orderId = (String) orderMap.get("id");
+        String orderNumber = (String) orderMap.get("order_number");
+
+        // Count customer orders before edit
+        mockMvc.perform(get("/api/tailor/customers/" + customerId + "/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+
+        // 3. Edit order via PATCH: replace items with Kurti (₹600) and Salwar (₹400), with ₹50 discount
+        List<Map<String, Object>> newItems = List.of(
+                Map.of("name", "Kurti Stitching", "quantity", 1, "rate", 600.00),
+                Map.of("name", "Salwar Stitching", "quantity", 1, "rate", 400.00)
+        );
+
+        mockMvc.perform(patch("/api/tailor/orders/" + orderId)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "items", newItems,
+                                "discount", 50.00,
+                                "notes", "Customer changed garment request to Kurti + Salwar set"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(orderId)))
+                .andExpect(jsonPath("$.order_number", is(orderNumber)))
+                .andExpect(jsonPath("$.subtotal", is(1000.0)))
+                .andExpect(jsonPath("$.discount", is(50.0)))
+                .andExpect(jsonPath("$.total", is(950.0)))
+                .andExpect(jsonPath("$.due", is(950.0)))
+                .andExpect(jsonPath("$.items", hasSize(2)))
+                .andExpect(jsonPath("$.notes", containsString("Kurti + Salwar set")));
+
+        // 4. Verify that customer STILL has exactly 1 order (NO duplicate order created)
+        mockMvc.perform(get("/api/tailor/customers/" + customerId + "/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id", is(orderId)))
+                .andExpect(jsonPath("$[0].total", is(950.0)));
+    }
+
+    @Test
+    @DisplayName("Payment Workflow: Partial payment, excess rejection, rapid duplicate prevention, idempotency & full settlement")
+    @WithMockUser(username = "testtailor", roles = {"TAILOR"})
+    void testPaymentWorkflowWithPartialSettlementAndDeduplication() throws Exception {
+        // 1. Create Customer
+        String custRes = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Ananya Mukherjee", "phone", "9830554433"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(custRes, Map.class).get("id");
+
+        // 2. Create Order for ₹1000 with ₹0 advance
+        String orderRes = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", customerId,
+                                "items", List.of(Map.of("name", "Designer Lehenga Stitching", "quantity", 1, "rate", 1000.00))
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.total", is(1000.0)))
+                .andExpect(jsonPath("$.amount_paid", is(0.0)))
+                .andExpect(jsonPath("$.due", is(1000.0)))
+                .andExpect(jsonPath("$.payment_status", is("PAYMENT_DUE")))
+                .andReturn().getResponse().getContentAsString();
+        String orderId = (String) mapper.readValue(orderRes, Map.class).get("id");
+
+        // 3. Reject invalid payment amounts (<= 0)
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 0, "method", "CASH"))))
+                .andExpect(status().isBadRequest());
+
+        // 4. Reject payment exceeding total balance (> ₹1000)
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 1200.00, "method", "UPI"))))
+                .andExpect(status().isBadRequest());
+
+        // 5. Record valid partial payment of ₹400 via UPI
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 400.00,
+                                "method", "UPI",
+                                "reference", "UPI-GPAY-REC-9988"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(400.0)))
+                .andExpect(jsonPath("$.order.due", is(600.0)))
+                .andExpect(jsonPath("$.order.payment_status", is("PARTIALLY_PAID")));
+
+        // 6. Test rapid double submission: submitting identical ₹400 UPI payment immediately triggers 409 Conflict
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 400.00,
+                                "method", "UPI"
+                        ))))
+                .andExpect(status().isConflict());
+
+        // 7. Reject payment exceeding new remaining balance (> ₹600)
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 650.00, "method", "CASH"))))
+                .andExpect(status().isBadRequest());
+
+        // 8. Test Idempotency Key: submitting payment with idempotency key
+        String idempKey = "KEY-IDEMP-" + UUID.randomUUID();
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 100.00,
+                                "method", "CASH",
+                                "idempotencyKey", idempKey
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(500.0)))
+                .andExpect(jsonPath("$.order.due", is(500.0)));
+
+        // Resubmitting with the same idempotency key should safely return the existing payment without debiting again
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 100.00,
+                                "method", "CASH",
+                                "idempotencyKey", idempKey
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(500.0)));
+
+        // 9. Record final settlement of remaining ₹500
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 500.00,
+                                "method", "CASH",
+                                "note", "Final settlement on delivery"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(1000.0)))
+                .andExpect(jsonPath("$.order.due", is(0.0)))
+                .andExpect(jsonPath("$.order.payment_status", is("PAID")));
+    }
 }

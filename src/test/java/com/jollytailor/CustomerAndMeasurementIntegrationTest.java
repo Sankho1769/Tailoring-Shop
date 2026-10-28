@@ -132,4 +132,61 @@ class CustomerAndMeasurementIntegrationTest {
                         .content(mapper.writeValueAsString(badData)))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    @DisplayName("Edit Customer via PUT and PATCH: Both HTTP methods successfully update customer info without data corruption")
+    @WithMockUser(username = "testtailor", roles = {"TAILOR"})
+    void testCustomerEditViaPutAndPatch() throws Exception {
+        // Create customer
+        String res = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Mita Paul",
+                                "phone", "9831445566",
+                                "address", "Salt Lake Sector 1",
+                                "notes", "Prefers loose fit"
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(res, Map.class).get("id");
+
+        // Test PUT method (used by web frontend)
+        mockMvc.perform(put("/api/tailor/customers/" + customerId)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Mita Paul (Roy)",
+                                "phone", "9831445566",
+                                "address", "Salt Lake Sector 2",
+                                "notes", "Updated preferences"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name", is("Mita Paul (Roy)")))
+                .andExpect(jsonPath("$.address", is("Salt Lake Sector 2")));
+
+        // Test PATCH method
+        mockMvc.perform(patch("/api/tailor/customers/" + customerId)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Mita Paul Roy",
+                                "phone", "9831445566",
+                                "address", "Salt Lake Sector 3",
+                                "notes", "Final update"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name", is("Mita Paul Roy")))
+                .andExpect(jsonPath("$.address", is("Salt Lake Sector 3")));
+    }
+
+    @Test
+    @DisplayName("Payment QR endpoint returns configured Jolly Banerjee QR and UPI ID")
+    @WithMockUser(username = "testtailor", roles = {"TAILOR"})
+    void testPaymentQrReturnsConfiguredDetails() throws Exception {
+        mockMvc.perform(get("/api/tailor/payment-qr"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.upiId", is("jollybanerjee2021@oksbi")))
+                .andExpect(jsonPath("$.gpayQrUrl", containsString("jolly-ladies-tailor-qr.jpg")));
+    }
 }

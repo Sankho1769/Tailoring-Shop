@@ -26,11 +26,11 @@ const API = {
       headers.set('Content-Type', 'application/json');
     }
     if (!['GET','HEAD','OPTIONS','TRACE'].includes(method)) {
-      let token = csrfTokenCache || this.cookie('XSRF-TOKEN');
+      let token = this.cookie('XSRF-TOKEN') || csrfTokenCache;
       if (!token) {
         try {
           const c = await this.csrf();
-          token = c?.token || this.cookie('XSRF-TOKEN');
+          token = this.cookie('XSRF-TOKEN') || c?.token || csrfTokenCache;
         } catch (_) {}
       }
       if (token) {
@@ -50,6 +50,7 @@ const API = {
   },
   get(path) { return this.request(path); },
   post(path, data) { return this.request(path, {method:'POST', body: data instanceof FormData ? data : JSON.stringify(data)}); },
+  put(path, data) { return this.request(path, {method:'PUT', body:JSON.stringify(data)}); },
   patch(path, data) { return this.request(path, {method:'PATCH', body:JSON.stringify(data)}); },
   delete(path) { return this.request(path, {method:'DELETE'}); }
 };
