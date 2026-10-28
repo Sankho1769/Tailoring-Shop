@@ -108,6 +108,17 @@ class CustomerAndMeasurementIntegrationTest {
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].garment_type", is("Blouse")))
                 .andExpect(jsonPath("$[0].dimensions", containsString("bust")));
+
+        // 6. Look up customer by phone
+        mockMvc.perform(get("/api/tailor/customers/by-phone?phone=9830012345"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(customerId)))
+                .andExpect(jsonPath("$.name", is("Ananya Banerjee")));
+
+        // 7. Look up customer orders endpoint
+        mockMvc.perform(get("/api/tailor/customers/" + customerId + "/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
     }
 
     @Test

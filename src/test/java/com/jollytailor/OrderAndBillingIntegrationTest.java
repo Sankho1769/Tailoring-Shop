@@ -128,6 +128,19 @@ class OrderAndBillingIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.paymentStatus", is("PARTIALLY_PAID")))
                 .andExpect(jsonPath("$.newAmountPaid", is(650.0)));
+
+        // 8. Update order details without changing order ID or duplicating
+        mockMvc.perform(patch("/api/tailor/orders/" + orderId)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "dueDate", "2026-11-20",
+                                "notes", "Updated notes: customer confirmed delivery time"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(orderId)))
+                .andExpect(jsonPath("$.notes", containsString("customer confirmed delivery time")))
+                .andExpect(jsonPath("$.due_date", is("2026-11-20")));
     }
 
     @Test

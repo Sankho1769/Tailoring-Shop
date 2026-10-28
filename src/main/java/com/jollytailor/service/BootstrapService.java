@@ -18,6 +18,15 @@ public class BootstrapService implements CommandLineRunner {
         seed(adminUser, adminPassword, "ADMIN");
         seed(tailorUser, tailorPassword, "TAILOR");
         seed("admin_user", "AdminUserPassword123!", "ADMIN");
+        initCustomerRequestsSchema();
+    }
+    private void initCustomerRequestsSchema() {
+        try {
+            jdbc.execute("ALTER TABLE customer_requests ADD COLUMN IF NOT EXISTS email VARCHAR(160)");
+            jdbc.update("UPDATE shop_settings SET setting_value='9748546778' WHERE setting_key='shop_phone' AND (setting_value IS NULL OR setting_value LIKE '%98300%')");
+            jdbc.update("UPDATE shop_settings SET setting_value='919748546778' WHERE setting_key IN ('whatsapp_number','admin_notification_phone') AND (setting_value IS NULL OR setting_value LIKE '%98300%')");
+        } catch (Exception ignored) {
+        }
     }
     private void seed(String username, String password, String role) {
         if (username == null || username.isBlank() || password == null || password.length() < 12) return;

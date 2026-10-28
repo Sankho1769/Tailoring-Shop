@@ -12,14 +12,26 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 
 @Configuration
 public class SecurityConfig {
-    @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
-    @Bean UserDetailsService userDetailsService(DataSource dataSource) {
+    @Bean
+    SecurityContextRepository securityContextRepository() {
+        return new HttpSessionSecurityContextRepository();
+    }
+
+    @Bean
+    UserDetailsService userDetailsService(DataSource dataSource) {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         return username -> {
             var rows = jdbc.query("SELECT username,password_hash,role,active FROM app_users WHERE username=?",
@@ -30,17 +42,27 @@ public class SecurityConfig {
         };
     }
 
-    @Bean AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+    @Bean
+    AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
-    @Bean SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        CookieCsrfTokenRepository csrf = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        csrf.setCookiePath("/");
-        http.csrf(c -> c.csrfTokenRepository(csrf))
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        CookieCsrfTokenRepository csrfRepo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        csrfRepo.setCookiePath("/");
+
+        CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
+        requestHandler.setCsrfRequestAttributeName(null);
+
+        http.csrf(c -> c
+                .csrfTokenRepository(csrfRepo)
+                .csrfTokenRequestHandler(requestHandler)
+            )
+            .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
             .exceptionHandling(e -> e.authenticationEntryPoint(new org.springframework.security.web.authentication.HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/index.html", "/tailor.html", "/admin.html", "/bill.html", "/css/**", "/js/**", "/favicon.ico", "/error", "/api/auth/csrf", "/api/auth/login", "/api/public/**").permitAll()
+                .requestMatchers("/", "/index.html", "/tailor.html", "/admin.html", "/bill.html", "/css/**", "/js/**", "/images/**", "/favicon.ico", "/error", "/api/auth/csrf", "/api/auth/login", "/api/public/**").permitAll()
                 .requestMatchers("/api/admin/**", "/api/media/**").hasRole("ADMIN")
                 .requestMatchers("/api/tailor/**").hasAnyRole("ADMIN", "TAILOR")
                 .anyRequest().authenticated())

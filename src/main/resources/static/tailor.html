@@ -9,7 +9,7 @@
 <body>
 <header class="topbar">
   <a class="brand" href="/">
-    <div class="brand-mark">🧵</div>
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Logo" class="brand-logo">
     <div>
       <h1>Tailor Workspace</h1>
       <small>JOLLY LADIES TAILOR</small>
@@ -24,14 +24,15 @@
 
 <main>
   <!-- Login Panel -->
-  <section id="loginPanel" class="panel login-wrap">
+  <section id="loginPanel" class="panel login-wrap" style="text-align:center">
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Sewing Machine Logo" class="brand-logo-lg">
     <div class="eyebrow">Staff access</div>
     <h2>Tailor login</h2>
     <p class="muted">Sign in to manage customers, measurements, orders, and payments.</p>
-    <form id="loginForm">
+    <form id="loginForm" style="text-align:left">
       <div class="field">
         <label for="username">Username</label>
-        <input id="username" required autocomplete="username">
+        <input id="username" required autocomplete="username" placeholder="e.g. tailor1">
       </div>
       <div class="field" style="margin-top:12px">
         <label for="password">Password</label>
@@ -46,271 +47,614 @@
 
   <!-- Workspace Container -->
   <div id="workspace" class="hidden">
-    <div class="toolbar">
+    <!-- Workspace Top Header -->
+    <div class="toolbar" style="margin-bottom:12px">
       <div>
-        <div class="eyebrow">Tailor workspace</div>
-        <h2 style="font:700 32px Georgia,serif;color:var(--violet);margin:4px 0">Customer → Measurements → Bill</h2>
-        <p class="muted">Save or select a customer record first. Measurements and bills are linked to the saved customer.</p>
+        <div class="eyebrow">Customer-First Tailoring Operations</div>
+        <h2 style="font:700 28px Georgia,serif;color:var(--violet);margin:4px 0">Tailor Workspace</h2>
       </div>
-      <span id="whoami" class="pill">Signed in</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="whoami" class="pill">Signed in</span>
+        <button id="switchCustomerTopBtn" class="btn ghost btn-sm hidden" type="button">🔄 Switch Customer</button>
+      </div>
     </div>
 
-    <!-- Step 1 & Step 2 Layout -->
-    <div class="layout">
-      <!-- 1 · Customer Management -->
-      <section class="panel">
-        <h2>1 · Customer</h2>
-        <div class="field">
-          <label for="customerSearch">Search customer (by name or phone)</label>
-          <input id="customerSearch" placeholder="Type name or phone and press Enter...">
-        </div>
-        <div class="field" style="margin-top:10px">
-          <label for="customerSelect">Saved customers</label>
-          <select id="customerSelect">
-            <option value="">Select a customer…</option>
-          </select>
-        </div>
-        <div class="form-actions">
-          <button id="newCustomer" type="button" class="btn ghost">＋ New customer</button>
+    <!-- Workflow Progress Bar -->
+    <nav class="workflow-steps" aria-label="Tailoring Workflow">
+      <div id="stepNav1" class="workflow-step active">
+        <span class="step-num">1</span>
+        <span>Find Customer</span>
+      </div>
+      <span class="workflow-step-divider">›</span>
+      <div id="stepNav2" class="workflow-step">
+        <span class="step-num">2</span>
+        <span>Customer Hub & Measurements</span>
+      </div>
+      <span class="workflow-step-divider">›</span>
+      <div id="stepNav3" class="workflow-step">
+        <span class="step-num">3</span>
+        <span>Orders & Billing</span>
+      </div>
+    </nav>
+
+    <!-- Global Workspace Notice -->
+    <div id="workspaceNotice" class="notice" hidden></div>
+
+    <!-- ========================================================================= -->
+    <!-- STEP 1: Find or Register Customer                                         -->
+    <!-- ========================================================================= -->
+    <section id="step1View" class="section" style="margin-top:0">
+      <div class="search-hero">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+          <div>
+            <h2>Find or Register Customer</h2>
+            <p class="muted" style="margin:4px 0 0 0">Search by customer name or 10-digit mobile number to open their history, or register a new customer.</p>
+          </div>
+          <button id="showNewCustomerBtn" class="btn orange" type="button">＋ Add New Customer</button>
         </div>
 
-        <div class="divider-title">Register / Update Customer</div>
-        <form id="customerForm">
+        <div class="search-bar-wrap">
+          <input id="customerSearchInput" type="search" placeholder="Search by customer name or mobile number (e.g. Sunita or 9831)..." autocomplete="off">
+          <button id="searchBtn" class="btn" type="button">Search</button>
+        </div>
+      </div>
+
+      <!-- New Customer Registration Form (Collapsible) -->
+      <div id="newCustomerCard" class="panel hidden" style="margin-bottom:24px;border:2px solid var(--pink)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h3 style="margin:0;font-family:Georgia,serif;color:var(--violet)">＋ Register New Customer</h3>
+          <button id="cancelNewCustomerBtn" class="btn ghost btn-sm" type="button">✕ Cancel</button>
+        </div>
+
+        <div id="duplicatePhoneWarning" class="notice" hidden></div>
+
+        <form id="newCustomerForm">
           <div class="grid">
             <div class="field">
-              <label for="cName">Full Name *</label>
-              <input id="cName" required maxlength="160" placeholder="Customer full name">
+              <label for="newCustName">Full Name *</label>
+              <input id="newCustName" required maxlength="160" placeholder="e.g. Sunita Sen">
             </div>
             <div class="field">
-              <label for="cPhone">Phone Number *</label>
-              <input id="cPhone" required maxlength="30" inputmode="tel" placeholder="10-digit mobile number">
+              <label for="newCustPhone">Mobile Number *</label>
+              <input id="newCustPhone" required maxlength="15" inputmode="tel" placeholder="e.g. 9831122334">
             </div>
             <div class="field full">
-              <label for="cAddress">Address</label>
-              <textarea id="cAddress" rows="2" placeholder="Local address, landmark, area"></textarea>
+              <label for="newCustAddress">Address <span class="muted">(Optional)</span></label>
+              <textarea id="newCustAddress" rows="2" placeholder="Local address, landmark, area"></textarea>
             </div>
             <div class="field full">
-              <label for="cNotes">Customer preferences / notes</label>
-              <textarea id="cNotes" rows="2" placeholder="Fabric preferences, fit notes, urgent reminders"></textarea>
+              <label for="newCustNotes">Fitting Preferences / Notes <span class="muted">(Optional)</span></label>
+              <textarea id="newCustNotes" rows="2" placeholder="Fabric preferences, fitting likes/dislikes, special reminders"></textarea>
             </div>
           </div>
           <div class="form-actions">
-            <button class="btn" type="submit">Save Customer in PostgreSQL</button>
+            <button class="btn orange" type="submit">Save & Open Customer Hub</button>
+            <button id="cancelNewCustomerBtn2" class="btn ghost" type="button">Cancel</button>
           </div>
+          <div id="newCustNotice" class="notice" hidden></div>
         </form>
-        <div id="customerNotice" class="notice" hidden></div>
-        <div id="currentCustomer" class="notice success" hidden></div>
+      </div>
 
-        <!-- Customer Order History Preview -->
-        <div id="customerOrdersBox" class="hidden" style="margin-top:16px">
-          <div class="divider-title">Customer Previous Orders</div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Bill #</th>
-                  <th>Status</th>
-                  <th>Payment</th>
-                  <th>Total</th>
-                  <th>Due</th>
-                </tr>
-              </thead>
-              <tbody id="customerOrdersHistory">
-                <tr><td colspan="5">No previous orders.</td></tr>
-              </tbody>
-            </table>
+      <!-- Live Search Results Grid -->
+      <div id="searchResultsSection">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h3 id="searchResultsTitle" style="margin:0;font-size:16px;color:var(--violet)">Matching Customers</h3>
+          <span id="searchResultsCount" class="pill">Loading customers...</span>
+        </div>
+        <div id="customerResultsGrid" class="customer-results">
+          <!-- Dynamic customer cards -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- STEP 2: Selected Customer Hub & Navigation                                -->
+    <!-- ========================================================================= -->
+    <section id="step2View" class="hidden" style="margin-top:0">
+      <!-- Customer Summary Card -->
+      <div class="customer-summary-card">
+        <div class="customer-summary-header">
+          <div class="customer-summary-info">
+            <div class="eyebrow" style="color:var(--orange)">Selected Customer</div>
+            <h2 id="hubCustomerName">Customer Name</h2>
+            <div class="phone-badge">
+              <span>📱</span> <span id="hubCustomerPhone">Phone</span>
+              <a id="hubCustomerWaLink" href="#" target="_blank" rel="noopener" class="pill" style="margin-left:6px;text-decoration:none">💬 WhatsApp</a>
+            </div>
+            <p id="hubCustomerAddress" class="muted" style="margin:6px 0 0 0;font-size:13px"></p>
+            <p id="hubCustomerNotes" style="margin:4px 0 0 0;font-size:13px;color:var(--violet);font-style:italic"></p>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="hubNewOrderBtn" class="btn orange" type="button">✂️ ＋ New Order</button>
+            <button id="hubEditCustomerBtn" class="btn light" type="button">✏️ Edit Details</button>
+            <button id="hubSwitchCustomerBtn" class="btn ghost" type="button">🔄 Switch Customer</button>
           </div>
         </div>
-      </section>
 
-      <!-- 2 · Measurement Management -->
-      <section class="panel">
-        <h2>2 · Measurements</h2>
-        <p class="muted">Select garment type, enter measurements, and save dated measurement snapshot.</p>
-        <div id="measurementLock" class="notice">Select or save a customer first to unlock the measurement form.</div>
-
-        <fieldset id="measurementFieldset" disabled style="border:0;padding:0;margin:0;min-width:0">
-          <form id="measurementForm">
+        <!-- Inline Edit Customer Form (Collapsible) -->
+        <div id="editCustomerBox" class="panel hidden" style="margin-top:16px;border:1px dashed var(--violet)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h4 style="margin:0;color:var(--violet)">Edit Customer Information</h4>
+            <button id="cancelEditCustomerBtn" class="btn ghost btn-sm" type="button">✕ Close</button>
+          </div>
+          <form id="editCustomerForm">
             <div class="grid">
               <div class="field">
-                <label for="garment">Garment Type *</label>
-                <select id="garment">
+                <label for="editCustName">Full Name *</label>
+                <input id="editCustName" required maxlength="160">
+              </div>
+              <div class="field">
+                <label for="editCustPhone">Mobile Number *</label>
+                <input id="editCustPhone" required maxlength="15">
+              </div>
+              <div class="field full">
+                <label for="editCustAddress">Address</label>
+                <textarea id="editCustAddress" rows="2"></textarea>
+              </div>
+              <div class="field full">
+                <label for="editCustNotes">Preferences / Notes</label>
+                <textarea id="editCustNotes" rows="2"></textarea>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn" type="submit">Save Changes</button>
+              <button id="cancelEditCustomerBtn2" class="btn ghost" type="button">Cancel</button>
+            </div>
+            <div id="editCustNotice" class="notice" hidden></div>
+          </form>
+        </div>
+
+        <!-- Metrics bar -->
+        <div class="customer-metrics">
+          <div class="customer-metric-box">
+            <span>Total Orders</span>
+            <strong id="metricTotalOrders">0</strong>
+          </div>
+          <div class="customer-metric-box">
+            <span>Active Orders</span>
+            <strong id="metricActiveOrders" style="color:var(--orange)">0</strong>
+          </div>
+          <div class="customer-metric-box">
+            <span>Outstanding Due</span>
+            <strong id="metricOutstandingDue" style="color:#b30000">₹0.00</strong>
+          </div>
+          <div class="customer-metric-box">
+            <span>Latest Measurements</span>
+            <strong id="metricLatestMeasureDate" style="font-size:15px">—</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <nav class="tab-nav" aria-label="Customer Sections">
+        <button id="tabBtnOverview" class="tab-link active" type="button">📋 Overview & Active Orders</button>
+        <button id="tabBtnMeasurements" class="tab-link" type="button">📐 Measurement Snapshots (<span id="measureCountBadge">0</span>)</button>
+        <button id="tabBtnOrders" class="tab-link" type="button">🧵 All Orders & History (<span id="ordersCountBadge">0</span>)</button>
+        <button id="tabBtnPayments" class="tab-link" type="button">💳 Payments & In-Shop QR</button>
+      </nav>
+
+      <!-- ===================================================================== -->
+      <!-- TAB 1: Overview & Active Orders                                       -->
+      <!-- ===================================================================== -->
+      <div id="tabContentOverview">
+        <div class="toolbar" style="margin-bottom:12px">
+          <div>
+            <h3 style="margin:0;color:var(--violet)">Active Orders for <span class="customer-name-label"></span></h3>
+            <p class="muted" style="margin:4px 0 0 0">Orders currently in progress, trial, or ready for trial/delivery.</p>
+          </div>
+          <button id="overviewStartOrderBtn" class="btn orange" type="button">✂️ ＋ Start New Order</button>
+        </div>
+
+        <div id="activeOrdersList" style="display:grid;gap:12px">
+          <!-- Populated dynamically with active order cards -->
+        </div>
+
+        <!-- Quick Garment Measurement Highlights -->
+        <div style="margin-top:24px">
+          <h3 style="margin:0 0 10px;color:var(--violet)">Saved Garment Measurements</h3>
+          <div id="overviewMeasurementsHighlights" class="customer-results">
+            <!-- Summary cards for blouse, salwar, etc. -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================================================================== -->
+      <!-- TAB 2: Measurements History & Snapshot Recording                     -->
+      <!-- ===================================================================== -->
+      <div id="tabContentMeasurements" class="hidden">
+        <div class="toolbar" style="margin-bottom:12px">
+          <div>
+            <h3 style="margin:0;color:var(--violet)">Garment Measurements for <span class="customer-name-label"></span></h3>
+            <p class="muted" style="margin:4px 0 0 0">Select garment to view latest snapshot, take fresh measurements, or copy and edit.</p>
+          </div>
+          <button id="takeFreshMeasureBtn" class="btn light" type="button">＋ Take New Measurements</button>
+        </div>
+
+        <!-- Garment Selector Pills -->
+        <div class="garment-tabs" id="garmentTabButtons">
+          <button class="garment-tab-btn active" data-garment="Blouse" type="button">Blouse</button>
+          <button class="garment-tab-btn" data-garment="Kurti" type="button">Kurti</button>
+          <button class="garment-tab-btn" data-garment="Salwar / Kameez" type="button">Salwar / Kameez</button>
+          <button class="garment-tab-btn" data-garment="Lehenga" type="button">Lehenga</button>
+          <button class="garment-tab-btn" data-garment="Pant" type="button">Pant</button>
+          <button class="garment-tab-btn" data-garment="Frock" type="button">Frock</button>
+          <button class="garment-tab-btn" data-garment="Alteration" type="button">Alteration</button>
+          <button class="garment-tab-btn" data-garment="False Par & Peko" type="button">False Par & Peko</button>
+          <button class="garment-tab-btn" data-garment="General body measurements" type="button">General</button>
+        </div>
+
+        <!-- Selected Garment Snapshot Highlight Card -->
+        <div id="garmentSnapshotDisplay" class="snapshot-card">
+          <!-- Filled dynamically -->
+        </div>
+
+        <!-- Measurement Recording / Editing Card (Collapsible) -->
+        <div id="measureFormCard" class="panel hidden" style="margin:20px 0;border:2px solid var(--violet)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div>
+              <h3 id="measureFormTitle" style="margin:0;color:var(--violet)">Record Measurement Snapshot</h3>
+              <p class="muted" style="margin:4px 0 0 0">Garment-specific measurements will be saved as an immutable dated snapshot.</p>
+            </div>
+            <button id="closeMeasureFormBtn" class="btn ghost btn-sm" type="button">✕ Close</button>
+          </div>
+
+          <form id="recordMeasurementForm">
+            <div class="grid">
+              <div class="field">
+                <label for="measureGarmentSelect">Garment Type *</label>
+                <select id="measureGarmentSelect">
                   <option value="Blouse">Blouse</option>
+                  <option value="Kurti">Kurti</option>
                   <option value="Salwar / Kameez">Salwar / Kameez</option>
+                  <option value="Lehenga">Lehenga</option>
                   <option value="Pant">Pant</option>
                   <option value="Frock">Frock</option>
-                  <option value="Lehenga">Lehenga</option>
-                  <option value="Kurti">Kurti</option>
-                  <option value="False Par & Peko">False Par & Peko</option>
                   <option value="Alteration">Alteration</option>
+                  <option value="False Par & Peko">False Par & Peko</option>
                   <option value="General body measurements">General body measurements</option>
                 </select>
               </div>
               <div class="field">
-                <label for="unit">Measurement Unit</label>
-                <select id="unit">
+                <label for="measureUnitSelect">Measurement Unit</label>
+                <select id="measureUnitSelect">
                   <option value="in">Inches (in)</option>
                   <option value="cm">Centimetres (cm)</option>
                 </select>
               </div>
             </div>
 
-            <div id="measurementFields" class="measure-grid" style="margin-top:14px"></div>
+            <!-- Dynamic Garment Fields Grid -->
+            <div id="dynamicMeasureFields" class="measure-grid" style="margin-top:14px"></div>
 
             <div class="grid" style="margin-top:14px">
               <div class="field">
-                <label for="fit">Fitting Preference</label>
-                <select id="fit">
-                  <option>Regular</option>
-                  <option>Fitted / Slim</option>
-                  <option>Comfort / Loose</option>
-                  <option>Custom as discussed</option>
+                <label for="measureFitPref">Fitting Preference</label>
+                <select id="measureFitPref">
+                  <option value="Regular">Regular</option>
+                  <option value="Fitted / Slim">Fitted / Slim</option>
+                  <option value="Comfort / Loose">Comfort / Loose</option>
+                  <option value="Custom as discussed">Custom as discussed</option>
                 </select>
               </div>
               <div class="field">
-                <label for="measureNotes">Special Fitting / Cut Notes</label>
-                <input id="measureNotes" placeholder="Neck cut, sleeve style, piping, latkan...">
+                <label for="measureSpecialNotes">Special Cut / Stitching Notes</label>
+                <input id="measureSpecialNotes" placeholder="Neck cut, sleeve style, lining, piping, latkan...">
               </div>
             </div>
 
             <div class="form-actions">
-              <button class="btn" type="submit">Save Measurement Snapshot</button>
+              <button class="btn orange" type="submit">💾 Save Measurement Snapshot</button>
+              <button id="cancelMeasureFormBtn" class="btn ghost" type="button">Cancel</button>
             </div>
+            <div id="measureNotice" class="notice" hidden></div>
           </form>
-        </fieldset>
-        <div id="measureNotice" class="notice" hidden></div>
+        </div>
 
-        <div class="divider-title">Saved Measurement History</div>
+        <!-- Full Measurement History Timeline -->
+        <div style="margin-top:24px">
+          <h4 style="margin:0 0 8px 0;color:var(--violet)">Complete Measurement Snapshot History</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Garment</th>
+                  <th>Unit</th>
+                  <th>Date Recorded</th>
+                  <th>Fit Preference</th>
+                  <th>Key Dimensions</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="measureHistoryRows">
+                <tr><td colspan="6">Loading measurement history...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================================================================== -->
+      <!-- TAB 3: Orders & Billing Hub                                           -->
+      <!-- ===================================================================== -->
+      <div id="tabContentOrders" class="hidden">
+        <!-- Mode Banner (New Order vs Editing Order) -->
+        <div class="toolbar" style="margin-bottom:14px">
+          <div>
+            <h3 style="margin:0;color:var(--violet)">Orders & Invoices for <span class="customer-name-label"></span></h3>
+            <p class="muted" style="margin:4px 0 0 0">Create new stitching orders or update existing order instructions.</p>
+          </div>
+          <button id="tabOrdersNewOrderBtn" class="btn orange" type="button">✂️ ＋ New Order</button>
+        </div>
+
+        <!-- Order Form Card (Collapsible) -->
+        <div id="orderEditorCard" class="panel hidden" style="margin-bottom:24px;border:2px solid var(--violet)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+            <div>
+              <span id="orderEditorModeBadge" class="pill orange">Mode: Creating New Order</span>
+              <h3 id="orderEditorTitle" style="margin:4px 0 0 0;font-family:Georgia,serif;font-size:22px;color:var(--violet)">New Stitching Order</h3>
+            </div>
+            <button id="cancelOrderEditorBtn" class="btn ghost btn-sm" type="button">✕ Cancel</button>
+          </div>
+
+          <!-- Services / Products Selection -->
+          <div class="divider-title">1 · Select Services & Rates</div>
+          <div class="grid">
+            <div class="field">
+              <label for="orderProduct">Stitching Service / Product *</label>
+              <select id="orderProduct"></select>
+            </div>
+            <div class="field">
+              <label for="orderRate">
+                Unit Rate (₹)
+                <span id="defaultRateBadge" class="pill" style="font-size:11px">Default: ₹0.00</span>
+              </label>
+              <input type="number" min="0" step="0.01" id="orderRate" value="0">
+            </div>
+            <div class="field">
+              <label for="orderQty">Quantity</label>
+              <input type="number" min="1" id="orderQty" value="1">
+            </div>
+            <div class="field" id="adjustmentReasonWrap">
+              <label for="orderReason">Adjustment Reason (if price changed)</label>
+              <input id="orderReason" placeholder="e.g. Heavy lining, custom latkan, loyalty discount">
+            </div>
+          </div>
+          <div class="form-actions" style="margin-top:10px">
+            <button id="addOrderItemBtn" class="btn light" type="button">＋ Add Item to Bill</button>
+          </div>
+
+          <!-- Items Cart Table -->
+          <div class="table-wrap" style="margin-top:12px">
+            <table>
+              <thead>
+                <tr>
+                  <th>Service / Garment</th>
+                  <th>Default Rate</th>
+                  <th>Agreed Rate</th>
+                  <th>Qty</th>
+                  <th>Amount</th>
+                  <th>Remove</th>
+                </tr>
+              </thead>
+              <tbody id="cartTableBody">
+                <tr><td colspan="6">No services added to bill yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin:12px 0;display:flex;justify-content:flex-end;gap:18px;font-size:16px">
+            <span>Subtotal: <strong id="cartSubtotalText">₹0.00</strong></span>
+            <span>Total: <strong id="cartTotalText" style="color:var(--violet)">₹0.00</strong></span>
+          </div>
+
+          <!-- Order Configuration & Measurements Attachment -->
+          <div class="divider-title" style="margin-top:18px">2 · Delivery, Measurements & Notes</div>
+          <div class="grid">
+            <div class="field">
+              <label for="orderMeasurementSelect">Attached Measurement Snapshot</label>
+              <select id="orderMeasurementSelect">
+                <option value="">No measurement snapshot attached</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="orderDueDate">Promised Delivery Date</label>
+              <input id="orderDueDate" type="date">
+            </div>
+            <div class="field">
+              <label for="orderDiscount">Overall Bill Discount (₹)</label>
+              <input id="orderDiscount" type="number" min="0" step="0.01" value="0">
+            </div>
+            <div class="field" id="orderStatusFieldWrap" hidden>
+              <label for="orderStatusSelect">Order Status</label>
+              <select id="orderStatusSelect">
+                <option value="NEW">New</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="TRIAL">Trial</option>
+                <option value="READY">Ready</option>
+                <option value="DELIVERED">Delivered</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            </div>
+            <div class="field full">
+              <label for="orderNotes">Fabric / Stitching Instructions</label>
+              <input id="orderNotes" placeholder="Customer fabric color, lining type, urgent delivery notes...">
+            </div>
+          </div>
+
+          <!-- Advance Payment (Only for New Orders) -->
+          <div id="advancePaymentSection">
+            <div class="divider-title" style="margin-top:18px">3 · Advance Payment (Optional)</div>
+            <div class="grid">
+              <div class="field">
+                <label for="orderAdvanceAmount">Advance Amount Collected (₹)</label>
+                <input id="orderAdvanceAmount" type="number" min="0" step="0.01" value="0">
+              </div>
+              <div class="field">
+                <label for="orderAdvanceMethod">Payment Method</label>
+                <select id="orderAdvanceMethod">
+                  <option value="UPI">UPI (GPay / PhonePe / QR)</option>
+                  <option value="CASH">Cash</option>
+                  <option value="CARD">Card</option>
+                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                </select>
+              </div>
+              <div class="field full">
+                <label for="orderAdvanceRef">Advance Reference / Notes</label>
+                <input id="orderAdvanceRef" placeholder="UPI transaction ID or cash note">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions" style="margin-top:20px">
+            <button id="saveOrderBtn" class="btn orange" type="button">Generate Unique Bill</button>
+            <button id="cancelOrderBtn2" class="btn ghost" type="button">Cancel</button>
+          </div>
+          <div id="orderEditorNotice" class="notice" hidden></div>
+        </div>
+
+        <!-- Customer Orders Table -->
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Garment</th>
-                <th>Unit</th>
-                <th>Date</th>
-                <th>Action / Snapshot</th>
+                <th>Bill #</th>
+                <th>Created</th>
+                <th>Status</th>
+                <th>Payment</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Due</th>
+                <th>Delivery Date</th>
+                <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="measureHistory">
-              <tr><td colspan="4">Select a customer to view measurements.</td></tr>
+            <tbody id="customerOrdersTableBody">
+              <tr><td colspan="9">Loading orders...</td></tr>
             </tbody>
           </table>
         </div>
-      </section>
-    </div>
 
-    <!-- Step 3: Create Order & Billing -->
-    <section class="panel section">
-      <h2>3 · Create Bill / Order</h2>
-      <p class="muted">Add stitching services, select delivery date, specify initial advance (if any), and generate a unique bill.</p>
-
-      <div class="grid">
-        <div class="field">
-          <label for="orderProduct">Stitching Service / Stock Item *</label>
-          <select id="orderProduct"></select>
-        </div>
-        <div class="field">
-          <label for="orderRate">Agreed Unit Rate (₹) <span id="defaultRateBadge" class="pill" style="font-size:11px;background:#f3e8f4;color:var(--violet)">Default: ₹0.00</span></label>
-          <input type="number" min="0" step="0.01" id="orderRate" value="0">
-        </div>
-        <div class="field">
-          <label for="orderQty">Quantity</label>
-          <input type="number" min="1" id="orderQty" value="1">
-        </div>
-        <div class="field" id="adjustmentReasonWrap">
-          <label for="orderReason">Adjustment Reason (if rate modified)</label>
-          <input id="orderReason" placeholder="e.g. Heavy lining, custom latkan, loyalty discount">
-        </div>
-        <div class="field">
-          <label for="dueDate">Promised Delivery Date</label>
-          <input id="dueDate" type="date">
-        </div>
-        <div class="field">
-          <label for="discount">Overall Bill Discount (₹)</label>
-          <input id="discount" type="number" min="0" step="0.01" value="0">
-        </div>
-        <div class="field full">
-          <label for="orderNotes">Order / Fabric Notes</label>
-          <input id="orderNotes" placeholder="Fabric color, customer cloth supplied, urgent trial...">
+        <!-- Generated Bill / Invoice Detail Card -->
+        <div id="orderBillResultCard" class="panel hidden" style="margin-top:24px;border:2px solid var(--violet)">
+          <!-- Rendered order summary, invoice & WhatsApp button -->
         </div>
       </div>
 
-      <!-- Advance Payment inputs at bill creation -->
-      <div class="divider-title" style="margin-top:14px">Advance Payment (Optional)</div>
-      <div class="grid">
-        <div class="field">
-          <label for="advanceAmount">Advance Collected (₹)</label>
-          <input id="advanceAmount" type="number" min="0" step="0.01" value="0" placeholder="0.00">
+      <!-- ===================================================================== -->
+      <!-- TAB 4: Payments & In-Shop GPay QR                                     -->
+      <!-- ===================================================================== -->
+      <div id="tabContentPayments" class="hidden">
+        <!-- In-Shop GPay QR Card -->
+        <div style="margin-bottom:20px;padding:18px;background:#fdf6fd;border-radius:14px;border:1.5px solid #ebd3e8">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <h3 style="margin:0;color:var(--violet)">💳 In-Shop UPI / GPay Payment</h3>
+              <p class="muted" style="margin:4px 0 0 0;font-size:13px">Show the shop's configured GPay QR code to customer for direct UPI payment.</p>
+            </div>
+            <button id="toggleGpayQrBtn" class="btn light" type="button">📱 Show Shop GPay QR</button>
+          </div>
+
+          <div id="shopGpayQrDisplay" class="hidden" style="margin-top:16px;text-align:center;background:#fff;padding:18px;border-radius:12px;border:1px solid #ddd">
+            <h4 id="tailorQrShopName" style="margin:0 0 4px 0;color:var(--violet)">Jolly Ladies Tailor</h4>
+            <p id="tailorQrUpiId" style="margin:0 0 10px 0;font-weight:700;color:#333;font-size:14px">UPI ID: Loading...</p>
+            <img id="tailorGpayQrImg" alt="Shop GPay QR" style="max-width:220px;width:100%;height:auto;border:1px solid #ccc;border-radius:8px;padding:6px;background:#fff;margin:0 auto;display:block">
+            <p id="tailorQrDueAmount" style="margin:10px 0 0 0;font-size:16px;font-weight:700;color:var(--orange)"></p>
+            <div class="notice" style="margin-top:12px;font-size:13px;background:#fff2d6;color:#995400;text-align:left">
+              ⚠️ <strong>Verification Workflow:</strong><br>
+              1. Customer scans QR & completes payment in Google Pay / UPI app.<br>
+              2. Verify funds arrival in the shop's bank account or GPay alert.<br>
+              3. Enter verified amount below and submit "Record Transaction".
+            </div>
+          </div>
         </div>
-        <div class="field">
-          <label for="advanceMethod">Advance Payment Method</label>
-          <select id="advanceMethod">
-            <option value="UPI">UPI (Google Pay / PhonePe / Paytm)</option>
-            <option value="CASH">Cash</option>
-            <option value="CARD">Card</option>
-            <option value="BANK_TRANSFER">Bank Transfer</option>
-          </select>
+
+        <!-- Payment Recording Form -->
+        <div class="panel">
+          <h3 style="margin:0 0 6px;color:var(--violet)">Record Verified Payment or Refund</h3>
+          <p class="muted" style="margin:0 0 16px">Record payment against any order with an outstanding balance.</p>
+
+          <form id="recordPaymentForm">
+            <div class="grid">
+              <div class="field">
+                <label for="paymentOrderSelect">Select Order to Pay *</label>
+                <select id="paymentOrderSelect"></select>
+              </div>
+              <div class="field">
+                <label for="paymentTypeSelect">Transaction Type</label>
+                <select id="paymentTypeSelect">
+                  <option value="PAYMENT">Payment Receipt</option>
+                  <option value="REFUND">Refund / Reversal</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="paymentAmountInput">Amount (₹) *</label>
+                <input id="paymentAmountInput" type="number" min="0.01" step="0.01" required placeholder="0.00">
+              </div>
+              <div class="field">
+                <label for="paymentMethodSelect">Payment Method</label>
+                <select id="paymentMethodSelect">
+                  <option value="UPI">UPI (Verified in GPay)</option>
+                  <option value="CASH">Cash</option>
+                  <option value="CARD">Card</option>
+                  <option value="BANK_TRANSFER">Bank transfer</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              <div class="field full">
+                <label for="paymentRefInput">Reference / Notes</label>
+                <input id="paymentRefInput" placeholder="UPI transaction ID, receipt reference, or reason for refund">
+              </div>
+            </div>
+            <div class="form-actions" style="margin-top:16px">
+              <button class="btn orange" type="submit">Record Transaction in Database</button>
+            </div>
+            <div id="paymentNotice" class="notice" hidden></div>
+          </form>
         </div>
-        <div class="field full">
-          <label for="advanceRef">Advance Reference / UPI Transaction ID</label>
-          <input id="advanceRef" placeholder="Optional transaction reference or note">
+
+        <!-- Payments Ledger for Customer -->
+        <div style="margin-top:24px">
+          <h4 style="margin:0 0 10px;color:var(--violet)">Customer Payment History Ledger</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date & Time</th>
+                  <th>Bill #</th>
+                  <th>Type</th>
+                  <th>Method</th>
+                  <th>Amount</th>
+                  <th>Reference / Note</th>
+                </tr>
+              </thead>
+              <tbody id="customerPaymentsLedgerBody">
+                <tr><td colspan="6">Loading payment history...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-
-      <div class="form-actions" style="margin-top:16px">
-        <button id="addOrderItem" class="btn light" type="button">＋ Add Service to Bill</button>
-        <button id="createOrder" class="btn orange" type="button">Generate Unique Bill</button>
-      </div>
-
-      <!-- Bill items cart -->
-      <div class="table-wrap" style="margin-top:14px">
-        <table>
-          <thead>
-            <tr>
-              <th>Service / Item</th>
-              <th>Default Rate</th>
-              <th>Agreed Rate</th>
-              <th>Qty</th>
-              <th>Amount</th>
-              <th>Remove</th>
-            </tr>
-          </thead>
-          <tbody id="cartRows">
-            <tr><td colspan="6">No services added to bill yet.</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="toolbar" style="margin-top:14px">
-        <div style="font-size:18px">
-          <strong>Subtotal: <span id="cartSubtotal">₹0.00</span></strong> ·
-          <strong>Net Total: <span id="cartTotal">₹0.00</span></strong>
-        </div>
-        <span id="orderNotice" class="notice" hidden></span>
-      </div>
-
-      <!-- Order Result and Printable Invoice -->
-      <div id="orderResult" class="panel hidden" style="margin-top:18px;border:2px solid var(--violet)"></div>
     </section>
 
-    <!-- Recent Orders Table -->
-    <section class="panel section">
+    <!-- Recent Shop Orders Section (Always visible below for quick tailor shop overview) -->
+    <section class="panel section" style="margin-top:30px">
       <div class="toolbar">
         <div>
-          <h2 style="margin:0">Recent Orders</h2>
-          <p class="muted">Track order progress and payment collection.</p>
+          <h3 style="margin:0;color:var(--violet)">Recent Shop-Wide Orders</h3>
+          <p class="muted" style="margin:4px 0 0 0">Latest orders across all shop customers.</p>
         </div>
-        <button id="refreshOrders" class="btn ghost" type="button">Refresh Orders</button>
+        <button id="refreshRecentShopOrdersBtn" class="btn ghost btn-sm" type="button">🔄 Refresh List</button>
       </div>
 
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Bill No.</th>
+              <th>Bill #</th>
               <th>Customer</th>
               <th>Status</th>
-              <th>Payment Status</th>
+              <th>Payment</th>
               <th>Total</th>
               <th>Paid</th>
               <th>Due</th>
@@ -318,78 +662,11 @@
               <th>Actions</th>
             </tr>
           </thead>
-          <tbody id="ordersRows">
-            <tr><td colspan="9">Loading orders...</td></tr>
+          <tbody id="recentShopOrdersRows">
+            <tr><td colspan="9">Loading shop orders...</td></tr>
           </tbody>
         </table>
       </div>
-    </section>
-
-    <!-- Record Payment / Refund Section -->
-    <section class="panel section">
-      <h2>Record Verified Payment or Refund</h2>
-      <p class="muted">Record manual payments after confirming receipt in Google Pay / cash box.</p>
-
-      <!-- Shop GPay QR In-Store Verification Card -->
-      <div style="margin:16px 0 20px 0;padding:16px;background:#fdf6fd;border-radius:12px;border:1px solid #ebd3e8">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-          <div>
-            <h3 style="margin:0;color:var(--violet)">💳 In-Shop UPI / GPay Payment</h3>
-            <p class="muted" style="margin:4px 0;font-size:13px">Show the shop's configured GPay QR to customer for direct UPI payment.</p>
-          </div>
-          <button id="toggleGpayQrBtn" class="btn light" type="button">📱 Show Shop GPay QR</button>
-        </div>
-
-        <div id="shopGpayQrDisplay" class="hidden" style="margin-top:16px;text-align:center;background:#fff;padding:16px;border-radius:10px;border:1px solid #ddd">
-          <h4 id="tailorQrShopName" style="margin:0 0 4px 0;color:var(--violet)">Jolly Ladies Tailor</h4>
-          <p id="tailorQrUpiId" style="margin:0 0 10px 0;font-weight:700;color:#333;font-size:14px">UPI ID: Loading...</p>
-          <img id="tailorGpayQrImg" alt="Shop GPay QR" style="max-width:220px;width:100%;height:auto;border:1px solid #ccc;border-radius:8px;padding:6px;background:#fff;margin:0 auto;display:block">
-          <p id="tailorQrDueAmount" style="margin:10px 0 0 0;font-size:15px;font-weight:700;color:var(--orange)"></p>
-          <div class="notice" style="margin-top:12px;font-size:13px;background:#fff2d6;color:#995400;text-align:left">
-            ⚠️ <strong>Verification Workflow:</strong><br>
-            1. Have customer scan QR & complete payment in Google Pay / UPI app.<br>
-            2. Verify funds arrival in the shop's bank account or GPay notification.<br>
-            3. Enter verified amount below and submit "Record Transaction".
-          </div>
-        </div>
-      </div>
-      <form id="paymentForm">
-        <div class="grid">
-          <div class="field">
-            <label for="paymentOrder">Select Order with Due Balance</label>
-            <select id="paymentOrder"></select>
-          </div>
-          <div class="field">
-            <label for="paymentTypeSelect">Transaction Type</label>
-            <select id="paymentTypeSelect">
-              <option value="PAYMENT">Payment Receipt</option>
-              <option value="REFUND">Refund / Reversal</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="paymentAmount">Amount (₹) *</label>
-            <input id="paymentAmount" type="number" min="0.01" step="0.01" required placeholder="0.00">
-          </div>
-          <div class="field">
-            <label for="paymentMethod">Payment Method</label>
-            <select id="paymentMethod">
-              <option value="UPI">UPI (Verified in GPay)</option>
-              <option value="CASH">Cash</option>
-              <option value="CARD">Card</option>
-              <option value="BANK_TRANSFER">Bank transfer</option>
-              <option value="OTHER">Other</option>
-            </select>
-          </div>
-          <div class="field full">
-            <label for="paymentRef">Reference / Notes</label>
-            <input id="paymentRef" placeholder="UPI transaction ID, receipt reference, or reason for refund">
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn" type="submit">Record Transaction in Database</button>
-        </div>
-        <div id="paymentNotice" class="notice" hidden></div>
-      </form>
     </section>
   </div>
 </main>

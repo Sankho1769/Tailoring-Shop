@@ -1,7 +1,10 @@
 package com.jollytailor.controller;
 
 import com.jollytailor.service.StorageService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
@@ -12,10 +15,34 @@ import org.springframework.web.server.ResponseStatusException;
 public class PublicController {
     private final JdbcTemplate jdbc;
     private final StorageService storage;
+    private final ConcurrentHashMap<String, Deque<Long>> ipRequestTimestamps = new ConcurrentHashMap<>();
 
     public PublicController(JdbcTemplate jdbc, StorageService storage) {
         this.jdbc = jdbc;
         this.storage = storage;
+    }
+
+    private void checkRateLimit(HttpServletRequest request) {
+        if (request == null) return;
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isBlank()) {
+            ip = request.getRemoteAddr();
+        } else if (ip.contains(",")) {
+            ip = ip.split(",")[0].trim();
+        }
+        if (ip == null || ip.isBlank()) ip = "unknown";
+
+        long now = System.currentTimeMillis();
+        Deque<Long> queue = ipRequestTimestamps.computeIfAbsent(ip, k -> new ConcurrentLinkedDeque<>());
+        synchronized (queue) {
+            while (!queue.isEmpty() && now - queue.peekFirst() > 60000L) {
+                queue.pollFirst();
+            }
+            if (queue.size() >= 10) {
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many enquiries. Please wait a minute before submitting again.");
+            }
+            queue.addLast(now);
+        }
     }
 
     @GetMapping("/shop")
@@ -49,18 +76,75 @@ public class PublicController {
         return rows;
     }
 
-    @PostMapping("/booking-requests")
+    @PostMapping({"/contact", "/enquiry", "/booking-requests"})
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String,Object> booking(@RequestBody Map<String,Object> body) {
+    public Map<String,Object> submitEnquiry(@RequestBody Map<String,Object> body, HttpServletRequest request) {
+        checkRateLimit(request);
+
         String name = text(body, "name");
-        String phone = text(body, "phone");
-        if (name.isBlank() || phone.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name and phone are required");
+        String rawPhone = text(body, "phone");
+        String email = text(body, "email");
+        String service = text(body, "service");
+        if (service.isBlank()) {
+            service = text(body, "requested_service");
         }
+        String message = text(body, "message");
+
+        // 1. Validate required name
+        if (name.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Customer name is required");
+        }
+        if (name.length() > 160) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name must not exceed 160 characters");
+        }
+
+        // 2. Validate required mobile number (standard Indian mobile format)
+        if (rawPhone.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mobile number is required");
+        }
+        String cleanPhone = rawPhone.replaceAll("[^0-9]", "");
+        if (cleanPhone.startsWith("91") && cleanPhone.length() == 12) {
+            cleanPhone = cleanPhone.substring(2);
+        } else if (cleanPhone.startsWith("0") && cleanPhone.length() == 11) {
+            cleanPhone = cleanPhone.substring(1);
+        }
+        if (!cleanPhone.matches("^[6-9]\\d{9}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Please enter a valid 10-digit Indian mobile number (e.g. 9748546778)");
+        }
+
+        // 3. Validate optional email
+        String storedEmail = null;
+        if (!email.isBlank()) {
+            if (email.length() > 160 || !email.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Please enter a valid email address or leave it blank");
+            }
+            storedEmail = email;
+        }
+
+        // 4. Validate required message
+        if (message.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message is required");
+        }
+        if (message.length() > 2000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message must not exceed 2000 characters");
+        }
+
+        // 5. Sanitize service
+        String storedService = blankToNull(service);
+        if (storedService != null && storedService.length() > 140) {
+            storedService = storedService.substring(0, 140);
+        }
+
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO customer_requests(id, name, phone, requested_service, message) VALUES(?,?,?,?,?)",
-                id, name, phone, blankToNull(text(body, "service")), blankToNull(text(body, "message")));
-        return Map.of("id", id, "message", "Thanks! The shop will contact you to confirm your request.");
+        jdbc.update("INSERT INTO customer_requests(id, name, phone, email, requested_service, message, status) VALUES(?,?,?,?,?,?,'NEW')",
+                id, name, cleanPhone, storedEmail, storedService, message);
+        return Map.of(
+                "id", id.toString(),
+                "status", "SUCCESS",
+                "message", "Thank you! Your enquiry has been received. Jolly Ladies Tailor will contact you shortly."
+        );
     }
 
     @GetMapping("/bills/{id}")

@@ -1,12 +1,16 @@
+// ============================================================================
+// Jolly Ladies Tailor — Tailor Workspace (Customer-First Redesign)
+// ============================================================================
+
 const measurementDefinitions = {
   'Blouse': ['shoulder','bust','upperBust','blouseWaist','blouseLength','sleeveLength','armhole','biceps','wrist','frontNeck','backNeck','apexDistance'],
+  'Kurti': ['shoulder','bust','waist','hip','armhole','sleeveLength','kurtiLength','neckDepth'],
   'Salwar / Kameez': ['shoulder','bust','waist','hip','kameezLength','sleeveLength','armhole','neckDepth','salwarLength','thigh','ankle'],
   'Pant': ['waist','hip','rise','thigh','knee','bottom','inseam','outseam','pantLength'],
   'Frock': ['shoulder','bust','waist','hip','armhole','sleeveLength','frockLength','neckDepth'],
   'Lehenga': ['waist','hip','lehengaLength','flare','waistBand'],
-  'Kurti': ['shoulder','bust','waist','hip','armhole','sleeveLength','kurtiLength','neckDepth'],
-  'False Par & Peko': ['sareeLength','sareeWidth','parLength','pekoEdges','notesMeasurement'],
   'Alteration': ['shoulder','bust','waist','hip','sleeveLength','lengthToAdjust','waistToAdjust','notesMeasurement'],
+  'False Par & Peko': ['sareeLength','sareeWidth','parLength','pekoEdges','notesMeasurement'],
   'General body measurements': ['shoulder','bust','upperBust','waist','hip','armhole','biceps','wrist','fullLength','inseam']
 };
 
@@ -23,234 +27,731 @@ const labels = {
   pekoEdges: 'Peko edges', notesMeasurement: 'Other measurement'
 };
 
-const ORDER_STATUSES = [
-  { value: 'NEW', label: 'New' },
-  { value: 'IN_PROGRESS', label: 'In Progress' },
-  { value: 'TRIAL', label: 'Trial' },
-  { value: 'READY', label: 'Ready' },
-  { value: 'DELIVERED', label: 'Delivered' },
-  { value: 'CANCELLED', label: 'Cancelled' }
-];
+const ORDER_STATUS_LABELS = {
+  'NEW': 'New',
+  'IN_PROGRESS': 'In Progress',
+  'TRIAL': 'Trial',
+  'READY': 'Ready',
+  'DELIVERED': 'Delivered',
+  'CANCELLED': 'Cancelled'
+};
 
+// Workspace State
 let currentCustomer = null;
-let currentMeasurement = null;
+let customerMeasurements = [];
+let customerOrders = [];
+let shopOrders = [];
 let products = [];
 let cart = [];
-let orders = [];
+let editingOrderId = null;
+let selectedGarment = 'Blouse';
 let shopSettings = {};
 let paymentQrData = {};
+let searchDebounceTimer = null;
 
 const val = id => {
   const el = document.getElementById(id);
   return el ? el.value.trim() : '';
 };
 
-function drawMeasurementFields() {
-  const garment = val('garment');
-  const keys = measurementDefinitions[garment] || measurementDefinitions['General body measurements'];
-  const unit = val('unit') === 'in' ? 'Inches' : 'cm';
-  document.getElementById('measurementFields').innerHTML = keys.map(k => `
-    <div class="field">
-      <label for="m_${k}">${escapeHTML(labels[k] || k)}</label>
-      <input id="m_${k}" data-measure="${k}" type="text" inputmode="decimal" placeholder="${unit}">
-    </div>
-  `).join('');
-}
-
-function readDimensions() {
-  const result = {};
-  document.querySelectorAll('[data-measure]').forEach(el => {
-    if (el.value.trim() !== '') {
-      result[el.dataset.measure] = el.value.trim();
-    }
-  });
-  return result;
-}
-
+// ============================================================================
+// Authentication
+// ============================================================================
 async function doLogin(event) {
   event.preventDefault();
+  const username = val('username');
+  const password = document.getElementById('password') ? document.getElementById('password').value : '';
+  if (!username || !password) {
+    setNotice('#loginNotice', 'Please enter your username and password.');
+    return;
+  }
   try {
     await API.csrf();
-    const who = await API.post('/api/auth/login', { username: val('username'), password: val('password') });
+    const who = await API.post('/api/auth/login', { username, password });
     if (!['ADMIN', 'TAILOR'].includes(who.role)) {
-      throw new Error('This account does not have tailor workspace permissions');
+      throw new Error('This account does not have tailor workspace permissions.');
     }
     document.getElementById('whoami').textContent = `${who.username} · ${who.role}`;
     document.getElementById('loginPanel').classList.add('hidden');
     document.getElementById('workspace').classList.remove('hidden');
     document.getElementById('logout').classList.remove('hidden');
-    await loadInitial();
+    if (document.getElementById('password')) document.getElementById('password').value = '';
+    await loadInitialWorkspace();
   } catch (e) {
     setNotice('#loginNotice', e.message);
   }
 }
 
-async function loadCustomers(q = '') {
-  try {
-    const list = await API.get('/api/tailor/customers' + (q ? '?q=' + encodeURIComponent(q) : ''));
-    const sel = document.getElementById('customerSelect');
-    const previous = sel.value;
-    sel.innerHTML = '<option value="">Select a customer…</option>' + list.map(c =>
-      `<option value="${c.id}">${escapeHTML(c.name)} · ${escapeHTML(c.phone)}</option>`
-    ).join('');
-    if (previous && list.some(c => c.id === previous)) {
-      sel.value = previous;
-    }
-  } catch (err) {
-    setNotice('#customerNotice', err.message);
-  }
+function logout() {
+  API.post('/api/auth/logout', {}).finally(() => location.reload());
 }
 
-async function chooseCustomer(id) {
-  currentCustomer = null;
-  currentMeasurement = null;
-  drawMeasurementFields();
-  document.getElementById('measureNotes').value = '';
-  document.getElementById('fit').value = 'Regular';
-  document.getElementById('measurementFieldset').disabled = !id;
-  document.getElementById('measurementLock').hidden = !!id;
-  document.getElementById('currentCustomer').hidden = true;
-  document.getElementById('customerOrdersBox').classList.add('hidden');
-  document.getElementById('measureHistory').innerHTML = '<tr><td colspan="4">Select a customer to view measurements.</td></tr>';
-
-  if (!id) return;
-
+// ============================================================================
+// Initial Workspace Load
+// ============================================================================
+async function loadInitialWorkspace() {
   try {
-    currentCustomer = await API.get('/api/tailor/customers/' + id);
-    document.getElementById('cName').value = currentCustomer.name || '';
-    document.getElementById('cPhone').value = currentCustomer.phone || '';
-    document.getElementById('cAddress').value = currentCustomer.address || '';
-    document.getElementById('cNotes').value = currentCustomer.notes || '';
-    document.getElementById('currentCustomer').textContent = `Selected Customer: ${currentCustomer.name} · ${currentCustomer.phone}`;
-    document.getElementById('currentCustomer').hidden = false;
-
+    shopSettings = await API.get('/api/public/shop').catch(() => ({}));
     await Promise.all([
-      loadMeasurementHistory(),
-      loadCustomerOrdersHistory(currentCustomer.id)
+      loadPaymentQr(),
+      loadProducts(),
+      loadRecentShopOrders(),
+      searchCustomers('')
     ]);
   } catch (e) {
-    setNotice('#customerNotice', e.message);
+    console.warn('Workspace initialization warning:', e);
   }
 }
 
-async function loadCustomerOrdersHistory(customerId) {
+// ============================================================================
+// STEP 1: Customer Search & Registration
+// ============================================================================
+async function searchCustomers(q = '') {
   try {
-    const custOrders = orders.filter(o => o.customer_id === customerId);
-    const box = document.getElementById('customerOrdersBox');
-    const tbody = document.getElementById('customerOrdersHistory');
-    if (!custOrders.length) {
-      tbody.innerHTML = '<tr><td colspan="5">No previous orders for this customer.</td></tr>';
-      box.classList.remove('hidden');
-      return;
-    }
-    tbody.innerHTML = custOrders.map(o => `
-      <tr>
-        <td><strong>${escapeHTML(o.order_number)}</strong></td>
-        <td>${escapeHTML(o.status)}</td>
-        <td>${formatPaymentStatusBadge(o.payment_status)}</td>
-        <td>${money(o.total)}</td>
-        <td>${money(o.due)}</td>
-      </tr>
-    `).join('');
-    box.classList.remove('hidden');
-  } catch (e) {
-    console.warn('Could not load customer order history', e);
-  }
-}
-
-async function loadMeasurementHistory() {
-  if (!currentCustomer) return;
-  const rows = await API.get('/api/tailor/customers/' + currentCustomer.id + '/measurements');
-  const body = document.getElementById('measureHistory');
-  currentMeasurement = rows.length ? rows[0].id : null;
-
-  body.innerHTML = rows.length ? rows.map(m => `
-    <tr>
-      <td><strong>${escapeHTML(m.garment_type)}</strong></td>
-      <td>${escapeHTML(m.unit)}</td>
-      <td>${escapeHTML(new Date(m.created_at).toLocaleDateString())}</td>
-      <td>
-        <button class="btn ghost" type="button" data-use-measurement="${m.id}">Select for Bill</button>
-        <details style="margin-top:4px">
-          <summary style="cursor:pointer;color:var(--violet)">View Dimensions</summary>
-          <pre style="white-space:pre-wrap;font-size:12px;background:#f8f4f9;padding:6px;border-radius:6px;margin:4px 0">${escapeHTML(typeof m.dimensions === 'string' ? m.dimensions : JSON.stringify(m.dimensions, null, 2))}</pre>
-          <small class="muted">${escapeHTML(m.fit_preference || '')} ${escapeHTML(m.notes || '')}</small>
-        </details>
-      </td>
-    </tr>
-  `).join('') : '<tr><td colspan="4">No measurements saved yet for this customer.</td></tr>';
-
-  body.querySelectorAll('[data-use-measurement]').forEach(b => {
-    b.addEventListener('click', () => {
-      currentMeasurement = b.dataset.useMeasurement;
-      setNotice('#orderNotice', 'Measurement snapshot linked to the bill.', true);
-    });
-  });
-}
-
-async function saveCustomer(e) {
-  e.preventDefault();
-  try {
-    const payload = {
-      name: val('cName'),
-      phone: val('cPhone'),
-      address: val('cAddress'),
-      notes: val('cNotes')
-    };
-    const selectedId = document.getElementById('customerSelect').value;
-    const saved = (currentCustomer && selectedId === currentCustomer.id)
-      ? await API.patch('/api/tailor/customers/' + currentCustomer.id, payload)
-      : await API.post('/api/tailor/customers', payload);
-
-    currentCustomer = saved;
-    currentMeasurement = null;
-    document.getElementById('measurementFieldset').disabled = false;
-    document.getElementById('measurementLock').hidden = true;
-    drawMeasurementFields();
-    document.getElementById('measureNotes').value = '';
-
-    await loadCustomers();
-    document.getElementById('customerSelect').value = saved.id;
-    setNotice('#customerNotice', 'Customer record saved in PostgreSQL.', true);
-    document.getElementById('currentCustomer').textContent = `Selected Customer: ${saved.name} · ${saved.phone}`;
-    document.getElementById('currentCustomer').hidden = false;
-    await loadMeasurementHistory();
+    const list = await API.get('/api/tailor/customers' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    renderCustomerSearchResults(list, q);
   } catch (err) {
-    setNotice('#customerNotice', err.message);
+    console.error('Customer search failed:', err);
   }
 }
 
-async function saveMeasurement(e) {
-  e.preventDefault();
-  if (!currentCustomer) {
-    setNotice('#measureNotice', 'Save or select a customer before entering measurements.');
+function renderCustomerSearchResults(list, query) {
+  const grid = document.getElementById('customerResultsGrid');
+  const countBadge = document.getElementById('searchResultsCount');
+  countBadge.textContent = `${list.length} found`;
+
+  if (!list.length) {
+    grid.innerHTML = `
+      <div style="grid-column:1/-1;background:#fff;border:1.5px dashed #ebd3e8;border-radius:14px;padding:24px;text-align:center">
+        <p class="muted" style="margin:0 0 12px 0">No customer found matching "<strong>${escapeHTML(query)}</strong>".</p>
+        <button class="btn orange btn-sm" type="button" onclick="openNewCustomerForm('${escapeHTML(query)}')">＋ Add as New Customer</button>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = list.map(c => `
+    <div class="customer-card ${currentCustomer?.id === c.id ? 'selected' : ''}" onclick="selectCustomer('${c.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <h3>${escapeHTML(c.name)}</h3>
+        <span class="pill">Select ›</span>
+      </div>
+      <div class="phone">📱 ${escapeHTML(c.phone)}</div>
+      ${c.address ? `<div class="notes">📍 ${escapeHTML(c.address)}</div>` : ''}
+      ${c.notes ? `<div class="notes" style="font-style:italic">💬 ${escapeHTML(c.notes)}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function openNewCustomerForm(initialNameOrPhone = '') {
+  const card = document.getElementById('newCustomerCard');
+  card.classList.remove('hidden');
+  const isDigits = /^\d+$/.test(initialNameOrPhone.replace(/\D/g, ''));
+  if (isDigits && initialNameOrPhone.length >= 7) {
+    document.getElementById('newCustPhone').value = initialNameOrPhone;
+    document.getElementById('newCustName').focus();
+  } else if (initialNameOrPhone) {
+    document.getElementById('newCustName').value = initialNameOrPhone;
+    document.getElementById('newCustPhone').focus();
+  } else {
+    document.getElementById('newCustName').focus();
+  }
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeNewCustomerForm() {
+  document.getElementById('newCustomerCard').classList.add('hidden');
+  document.getElementById('newCustomerForm').reset();
+  document.getElementById('duplicatePhoneWarning').hidden = true;
+  document.getElementById('newCustNotice').hidden = true;
+}
+
+// Live Duplicate Phone Check
+async function checkDuplicatePhone(phone) {
+  const warn = document.getElementById('duplicatePhoneWarning');
+  const clean = phone.replace(/[^0-9+]/g, '');
+  if (clean.length < 10) {
+    warn.hidden = true;
     return;
   }
   try {
-    const result = await API.post('/api/tailor/customers/' + currentCustomer.id + '/measurements', {
-      garmentType: val('garment'),
-      unit: val('unit'),
-      dimensions: readDimensions(),
-      fitPreference: val('fit'),
-      notes: val('measureNotes')
+    const existing = await API.get('/api/tailor/customers/by-phone?phone=' + encodeURIComponent(clean));
+    if (existing && existing.id) {
+      warn.innerHTML = `
+        <strong>⚠️ Customer Already Registered:</strong> ${escapeHTML(existing.name)} (${escapeHTML(existing.phone)}) is already saved.
+        <button class="btn light btn-sm" type="button" style="margin-left:10px" onclick="selectCustomer('${existing.id}')">Open Existing Customer</button>
+      `;
+      warn.className = 'notice';
+      warn.hidden = false;
+    } else {
+      warn.hidden = true;
+    }
+  } catch (_) {
+    warn.hidden = true;
+  }
+}
+
+async function handleRegisterCustomer(e) {
+  e.preventDefault();
+  const name = val('newCustName');
+  const phone = val('newCustPhone');
+  const address = val('newCustAddress');
+  const notes = val('newCustNotes');
+
+  if (!name || !phone) {
+    setNotice('#newCustNotice', 'Name and mobile number are required.');
+    return;
+  }
+
+  try {
+    const saved = await API.post('/api/tailor/customers', { name, phone, address, notes });
+    closeNewCustomerForm();
+    await selectCustomer(saved.id);
+  } catch (err) {
+    setNotice('#newCustNotice', err.message);
+  }
+}
+
+// ============================================================================
+// STEP 2: Customer Hub & Active Record Management
+// ============================================================================
+async function selectCustomer(id) {
+  if (!id) return;
+  try {
+    currentCustomer = await API.get('/api/tailor/customers/' + id);
+    closeNewCustomerForm();
+
+    // Switch step views
+    document.getElementById('step1View').classList.add('hidden');
+    document.getElementById('step2View').classList.remove('hidden');
+    document.getElementById('switchCustomerTopBtn').classList.remove('hidden');
+
+    document.getElementById('stepNav1').classList.remove('active');
+    document.getElementById('stepNav1').classList.add('completed');
+    document.getElementById('stepNav2').classList.add('active');
+
+    // Populate Customer Summary Card
+    document.getElementById('hubCustomerName').textContent = currentCustomer.name;
+    document.getElementById('hubCustomerPhone').textContent = currentCustomer.phone;
+    document.getElementById('hubCustomerAddress').textContent = currentCustomer.address ? `📍 ${currentCustomer.address}` : 'No address saved';
+    document.getElementById('hubCustomerNotes').textContent = currentCustomer.notes ? `Preferences: ${currentCustomer.notes}` : '';
+
+    const digits = whatsappDigits(currentCustomer.phone);
+    const waLink = document.getElementById('hubCustomerWaLink');
+    if (digits) {
+      waLink.href = `https://wa.me/${digits}`;
+      waLink.style.display = 'inline-flex';
+    } else {
+      waLink.style.display = 'none';
+    }
+
+    // Set labels on other tabs
+    document.querySelectorAll('.customer-name-label').forEach(el => el.textContent = currentCustomer.name);
+
+    // Load related customer data in parallel
+    await Promise.all([
+      loadCustomerMeasurements(currentCustomer.id),
+      loadCustomerOrders(currentCustomer.id)
+    ]);
+
+    // Activate default Overview Tab
+    switchCustomerTab('overview');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    setNotice('#workspaceNotice', 'Failed to load customer: ' + err.message);
+  }
+}
+
+function switchBackToCustomerSearch() {
+  document.getElementById('step2View').classList.add('hidden');
+  document.getElementById('step1View').classList.remove('hidden');
+  document.getElementById('switchCustomerTopBtn').classList.add('hidden');
+
+  document.getElementById('stepNav2').classList.remove('active');
+  document.getElementById('stepNav3').classList.remove('active');
+  document.getElementById('stepNav1').classList.add('active');
+  document.getElementById('stepNav1').classList.remove('completed');
+
+  searchCustomers(val('customerSearchInput'));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Inline Edit Customer Details
+function openEditCustomerBox() {
+  if (!currentCustomer) return;
+  document.getElementById('editCustName').value = currentCustomer.name || '';
+  document.getElementById('editCustPhone').value = currentCustomer.phone || '';
+  document.getElementById('editCustAddress').value = currentCustomer.address || '';
+  document.getElementById('editCustNotes').value = currentCustomer.notes || '';
+  document.getElementById('editCustomerBox').classList.remove('hidden');
+}
+
+function closeEditCustomerBox() {
+  document.getElementById('editCustomerBox').classList.add('hidden');
+  document.getElementById('editCustNotice').hidden = true;
+}
+
+async function handleSaveCustomerEdits(e) {
+  e.preventDefault();
+  if (!currentCustomer) return;
+  const name = val('editCustName');
+  const phone = val('editCustPhone');
+  const address = val('editCustAddress');
+  const notes = val('editCustNotes');
+
+  try {
+    const updated = await API.patch('/api/tailor/customers/' + currentCustomer.id, { name, phone, address, notes });
+    currentCustomer = updated;
+    document.getElementById('hubCustomerName').textContent = currentCustomer.name;
+    document.getElementById('hubCustomerPhone').textContent = currentCustomer.phone;
+    document.getElementById('hubCustomerAddress').textContent = currentCustomer.address ? `📍 ${currentCustomer.address}` : 'No address saved';
+    document.getElementById('hubCustomerNotes').textContent = currentCustomer.notes ? `Preferences: ${currentCustomer.notes}` : '';
+    document.querySelectorAll('.customer-name-label').forEach(el => el.textContent = currentCustomer.name);
+    closeEditCustomerBox();
+    setNotice('#workspaceNotice', 'Customer details updated successfully in database.', true);
+  } catch (err) {
+    setNotice('#editCustNotice', err.message);
+  }
+}
+
+// Tab Switching
+function switchCustomerTab(tabName) {
+  const tabs = ['overview', 'measurements', 'orders', 'payments'];
+  tabs.forEach(t => {
+    const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+    const pane = document.getElementById('tabContent' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (btn) btn.classList.toggle('active', t === tabName);
+    if (pane) pane.classList.toggle('hidden', t !== tabName);
+  });
+
+  if (tabName === 'orders' || tabName === 'overview') {
+    document.getElementById('stepNav2').classList.remove('active');
+    document.getElementById('stepNav2').classList.add('completed');
+    document.getElementById('stepNav3').classList.add('active');
+  } else {
+    document.getElementById('stepNav3').classList.remove('active');
+    document.getElementById('stepNav2').classList.add('active');
+  }
+}
+
+// ============================================================================
+// MEASUREMENTS: Hub, Intelligent Reuse, Snapshots
+// ============================================================================
+async function loadCustomerMeasurements(customerId) {
+  try {
+    customerMeasurements = await API.get('/api/tailor/customers/' + customerId + '/measurements');
+    document.getElementById('measureCountBadge').textContent = customerMeasurements.length;
+
+    // Latest measurement date
+    if (customerMeasurements.length) {
+      const latest = customerMeasurements[0];
+      const d = new Date(latest.created_at);
+      document.getElementById('metricLatestMeasureDate').textContent = `${latest.garment_type} (${d.toLocaleDateString('en-IN', {month:'short', day:'numeric'})})`;
+    } else {
+      document.getElementById('metricLatestMeasureDate').textContent = 'None yet';
+    }
+
+    renderGarmentSnapshot(selectedGarment);
+    renderMeasurementsTimeline();
+    renderOverviewMeasurementHighlights();
+    populateOrderMeasurementDropdown();
+  } catch (err) {
+    console.error('Failed to load measurements:', err);
+  }
+}
+
+function selectGarmentTab(garment) {
+  selectedGarment = garment;
+  document.querySelectorAll('.garment-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.garment === garment);
+  });
+  renderGarmentSnapshot(garment);
+}
+
+function renderGarmentSnapshot(garment) {
+  const display = document.getElementById('garmentSnapshotDisplay');
+  const snapshots = customerMeasurements.filter(m => m.garment_type === garment);
+
+  if (!snapshots.length) {
+    display.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <h3 style="margin:0;color:var(--violet)">Latest ${escapeHTML(garment)} Measurements</h3>
+          <p class="muted" style="margin:4px 0 0 0">No measurement snapshot recorded for ${escapeHTML(garment)} yet.</p>
+        </div>
+        <button class="btn light btn-sm" type="button" onclick="openMeasurementForm('${escapeHTML(garment)}')">＋ Record ${escapeHTML(garment)} Measurements</button>
+      </div>`;
+    return;
+  }
+
+  const latest = snapshots[0];
+  let dims = {};
+  try { dims = typeof latest.dimensions === 'string' ? JSON.parse(latest.dimensions) : (latest.dimensions || {}); } catch(_) {}
+
+  const dateStr = new Date(latest.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  display.innerHTML = `
+    <div class="snapshot-card-header">
+      <div>
+        <h3 style="margin:0;color:var(--violet)">Latest ${escapeHTML(garment)} Snapshot</h3>
+        <small class="muted">Recorded on ${dateStr} · Fit: <strong>${escapeHTML(latest.fit_preference || 'Regular')}</strong> · Unit: <strong>${escapeHTML(latest.unit)}</strong></small>
+        ${latest.notes ? `<div style="font-size:12px;color:var(--violet);margin-top:4px">Notes: ${escapeHTML(latest.notes)}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn light btn-sm" type="button" onclick="copyAndEditMeasurement('${latest.id}')">📋 Copy & Edit</button>
+        <button class="btn orange btn-sm" type="button" onclick="useSnapshotForNewOrder('${latest.id}')">✂️ Use in New Order</button>
+        <button class="btn ghost btn-sm" type="button" onclick="openMeasurementForm('${escapeHTML(garment)}')">＋ Fresh</button>
+      </div>
+    </div>
+    <div class="dimension-chips">
+      ${Object.entries(dims).map(([k, v]) => `
+        <div class="dim-chip"><span>${escapeHTML(labels[k] || k)}:</span> <strong>${escapeHTML(v)} ${escapeHTML(latest.unit)}</strong></div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderOverviewMeasurementHighlights() {
+  const container = document.getElementById('overviewMeasurementsHighlights');
+  if (!container) return;
+
+  const popular = ['Blouse', 'Kurti', 'Salwar / Kameez', 'Pant'];
+  container.innerHTML = popular.map(g => {
+    const found = customerMeasurements.find(m => m.garment_type === g);
+    if (!found) {
+      return `
+        <div class="panel" style="padding:14px">
+          <h4 style="margin:0 0 6px 0;color:var(--violet)">${g}</h4>
+          <p class="muted" style="margin:0 0 10px 0;font-size:12px">No measurement recorded</p>
+          <button class="btn ghost btn-sm" type="button" onclick="switchCustomerTab('measurements');selectGarmentTab('${g}');openMeasurementForm('${g}')">＋ Record</button>
+        </div>`;
+    }
+    const d = new Date(found.created_at).toLocaleDateString('en-IN', {month:'short', day:'numeric'});
+    return `
+      <div class="panel" style="padding:14px;border-color:var(--pink)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <h4 style="margin:0;color:var(--violet)">${g}</h4>
+          <span class="pill">${d}</span>
+        </div>
+        <p class="muted" style="margin:0 0 10px 0;font-size:12px">Fit: <strong>${escapeHTML(found.fit_preference || 'Regular')}</strong> (${found.unit})</p>
+        <button class="btn light btn-sm" type="button" onclick="switchCustomerTab('measurements');selectGarmentTab('${g}')">View Snapshot</button>
+      </div>`;
+  }).join('');
+}
+
+function renderMeasurementsTimeline() {
+  const tbody = document.getElementById('measureHistoryRows');
+  if (!customerMeasurements.length) {
+    tbody.innerHTML = '<tr><td colspan="6">No measurement snapshots saved yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = customerMeasurements.map(m => {
+    const d = new Date(m.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+    let dims = {};
+    try { dims = typeof m.dimensions === 'string' ? JSON.parse(m.dimensions) : (m.dimensions || {}); } catch(_) {}
+    const preview = Object.entries(dims).slice(0, 4).map(([k,v]) => `${labels[k]||k}: ${v}`).join(', ') + (Object.keys(dims).length > 4 ? '…' : '');
+
+    return `
+      <tr>
+        <td><strong>${escapeHTML(m.garment_type)}</strong></td>
+        <td>${escapeHTML(m.unit)}</td>
+        <td>${d}</td>
+        <td>${escapeHTML(m.fit_preference || 'Regular')}</td>
+        <td><small class="muted">${escapeHTML(preview)}</small></td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn ghost btn-sm" type="button" onclick="copyAndEditMeasurement('${m.id}')">Copy & Edit</button>
+            <button class="btn light btn-sm" type="button" onclick="useSnapshotForNewOrder('${m.id}')">Use in Order</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function openMeasurementForm(garment = 'Blouse', existingDimensions = {}, fit = 'Regular', notes = '') {
+  document.getElementById('measureGarmentSelect').value = garment;
+  document.getElementById('measureFitPref').value = fit || 'Regular';
+  document.getElementById('measureSpecialNotes').value = notes || '';
+  drawDynamicMeasurementFields(garment, existingDimensions);
+
+  document.getElementById('measureFormTitle').textContent = `Record ${garment} Measurement Snapshot`;
+  document.getElementById('measureFormCard').classList.remove('hidden');
+  document.getElementById('measureFormCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeMeasurementForm() {
+  document.getElementById('measureFormCard').classList.add('hidden');
+  document.getElementById('recordMeasurementForm').reset();
+  document.getElementById('measureNotice').hidden = true;
+}
+
+function copyAndEditMeasurement(snapshotId) {
+  const snap = customerMeasurements.find(m => m.id === snapshotId);
+  if (!snap) return;
+  let dims = {};
+  try { dims = typeof snap.dimensions === 'string' ? JSON.parse(snap.dimensions) : (snap.dimensions || {}); } catch(_) {}
+  openMeasurementForm(snap.garment_type, dims, snap.fit_preference, snap.notes);
+  setNotice('#measureNotice', `Loaded values from snapshot (${new Date(snap.created_at).toLocaleDateString('en-IN')}). Modify as needed and save.`, true);
+}
+
+function drawDynamicMeasurementFields(garment, existingValues = {}) {
+  const keys = measurementDefinitions[garment] || measurementDefinitions['General body measurements'];
+  const unit = val('measureUnitSelect') === 'in' ? 'Inches' : 'cm';
+  const container = document.getElementById('dynamicMeasureFields');
+
+  container.innerHTML = keys.map(k => `
+    <div class="field">
+      <label for="dim_${k}">${escapeHTML(labels[k] || k)}</label>
+      <input id="dim_${k}" data-measure-key="${k}" type="text" inputmode="decimal"
+             placeholder="${unit}" value="${existingValues[k] ? escapeHTML(existingValues[k]) : ''}">
+    </div>
+  `).join('');
+}
+
+async function handleSaveMeasurement(e) {
+  e.preventDefault();
+  if (!currentCustomer) return;
+  const garment = val('measureGarmentSelect');
+  const unit = val('measureUnitSelect');
+  const fitPreference = val('measureFitPref');
+  const notes = val('measureSpecialNotes');
+
+  const dimensions = {};
+  document.querySelectorAll('[data-measure-key]').forEach(inp => {
+    const v = inp.value.trim();
+    if (v) dimensions[inp.dataset.measureKey] = v;
+  });
+
+  if (!Object.keys(dimensions).length) {
+    setNotice('#measureNotice', 'Please fill in at least one measurement dimension.');
+    return;
+  }
+
+  try {
+    const saved = await API.post(`/api/tailor/customers/${currentCustomer.id}/measurements`, {
+      garmentType: garment,
+      unit,
+      dimensions,
+      fitPreference,
+      notes
     });
-    currentMeasurement = result.id;
-    setNotice('#measureNotice', 'Measurement snapshot saved in customer history.', true);
-    await loadMeasurementHistory();
+    closeMeasurementForm();
+    await loadCustomerMeasurements(currentCustomer.id);
+    selectGarmentTab(garment);
+    setNotice('#workspaceNotice', `Measurement snapshot for ${garment} saved successfully in database.`, true);
   } catch (err) {
     setNotice('#measureNotice', err.message);
   }
 }
 
+// ============================================================================
+// ORDERS & BILLING: Step C Workflow
+// ============================================================================
+async function loadCustomerOrders(customerId) {
+  try {
+    customerOrders = await API.get('/api/tailor/customers/' + customerId + '/orders');
+    document.getElementById('ordersCountBadge').textContent = customerOrders.length;
+    document.getElementById('metricTotalOrders').textContent = customerOrders.length;
+
+    const active = customerOrders.filter(o => ['NEW', 'IN_PROGRESS', 'TRIAL', 'READY'].includes(o.status));
+    document.getElementById('metricActiveOrders').textContent = active.length;
+
+    const dueTotal = customerOrders.reduce((sum, o) => sum + Math.max(0, Number(o.due || 0)), 0);
+    document.getElementById('metricOutstandingDue').textContent = money(dueTotal);
+
+    renderCustomerOrdersTable();
+    renderActiveOrdersOverview(active);
+    populatePaymentOrderDropdown();
+  } catch (err) {
+    console.error('Failed to load customer orders:', err);
+  }
+}
+
+function renderActiveOrdersOverview(active) {
+  const container = document.getElementById('activeOrdersList');
+  if (!active.length) {
+    container.innerHTML = `
+      <div style="background:#fff;border:1px dashed #ebd3e8;border-radius:12px;padding:20px;text-align:center">
+        <p class="muted" style="margin:0 0 10px 0">No active orders pending right now for ${escapeHTML(currentCustomer.name)}.</p>
+        <button class="btn orange btn-sm" type="button" onclick="startNewOrder()">＋ Create New Order</button>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = active.map(o => `
+    <div class="panel" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <strong>${escapeHTML(o.order_number)}</strong>
+          <span class="status-badge status-${o.status}">${ORDER_STATUS_LABELS[o.status] || o.status}</span>
+          <span class="status-badge pay-${o.payment_status}">${formatPayBadge(o.payment_status)}</span>
+        </div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">
+          Promised Due Date: <strong>${o.due_date ? escapeHTML(o.due_date) : 'Not specified'}</strong> ·
+          Total: <strong>${money(o.total)}</strong> ·
+          Due: <strong style="color:#b30000">${money(o.due)}</strong>
+        </div>
+        ${o.notes ? `<div style="font-size:12px;color:var(--violet);margin-top:3px">Notes: ${escapeHTML(o.notes)}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn light btn-sm" type="button" onclick="openEditOrder('${o.id}')">✏️ Edit Order</button>
+        <button class="btn ghost btn-sm" type="button" onclick="viewOrderBill('${o.id}')">Invoice</button>
+        <button class="btn ghost btn-sm" type="button" onclick="shareWhatsAppOrder('${o.id}')">WhatsApp</button>
+        ${Number(o.due) > 0 ? `<button class="btn orange btn-sm" type="button" onclick="switchCustomerTab('payments');selectPaymentOrder('${o.id}')">💳 Collect Due</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderCustomerOrdersTable() {
+  const tbody = document.getElementById('customerOrdersTableBody');
+  if (!customerOrders.length) {
+    tbody.innerHTML = '<tr><td colspan="9">No orders recorded for this customer yet.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = customerOrders.map(o => `
+    <tr>
+      <td><strong>${escapeHTML(o.order_number)}</strong></td>
+      <td>${new Date(o.created_at).toLocaleDateString('en-IN', {month:'short', day:'numeric'})}</td>
+      <td>
+        <select onchange="updateOrderStatus('${o.id}', this.value)" style="padding:4px 8px;font-size:12px;border-radius:6px">
+          ${Object.entries(ORDER_STATUS_LABELS).map(([k, label]) => `
+            <option value="${k}" ${k === o.status ? 'selected' : ''}>${label}</option>
+          `).join('')}
+        </select>
+      </td>
+      <td><span class="status-badge pay-${o.payment_status}">${formatPayBadge(o.payment_status)}</span></td>
+      <td>${money(o.total)}</td>
+      <td>${money(o.amount_paid)}</td>
+      <td><strong>${money(o.due)}</strong></td>
+      <td>${o.due_date ? escapeHTML(o.due_date) : '—'}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn ghost btn-sm" type="button" onclick="openEditOrder('${o.id}')">Edit</button>
+          <button class="btn ghost btn-sm" type="button" onclick="viewOrderBill('${o.id}')">Bill</button>
+          <button class="btn ghost btn-sm" type="button" onclick="shareWhatsAppOrder('${o.id}')">WA</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function populateOrderMeasurementDropdown(selectedId = null) {
+  const sel = document.getElementById('orderMeasurementSelect');
+  if (!sel) return;
+
+  sel.innerHTML = '<option value="">No measurement snapshot attached (Alteration / Ready-made)</option>' +
+    customerMeasurements.map(m => {
+      const d = new Date(m.created_at).toLocaleDateString('en-IN', {month:'short', day:'numeric'});
+      return `<option value="${m.id}" ${m.id === selectedId ? 'selected' : ''}>${escapeHTML(m.garment_type)} — Snapshot (${d}) [${escapeHTML(m.fit_preference||'Regular')}]</option>`;
+    }).join('');
+}
+
+function startNewOrder() {
+  editingOrderId = null;
+  cart = [];
+  document.getElementById('orderEditorModeBadge').className = 'pill orange';
+  document.getElementById('orderEditorModeBadge').textContent = 'Mode: Creating New Order';
+  document.getElementById('orderEditorTitle').textContent = `New Stitching Order for ${currentCustomer.name}`;
+  document.getElementById('saveOrderBtn').textContent = 'Confirm & Generate Unique Bill';
+  document.getElementById('orderStatusFieldWrap').hidden = true;
+  document.getElementById('advancePaymentSection').classList.remove('hidden');
+
+  document.getElementById('orderDueDate').value = '';
+  document.getElementById('orderDiscount').value = '0';
+  document.getElementById('orderNotes').value = '';
+  document.getElementById('orderAdvanceAmount').value = '0';
+  document.getElementById('orderAdvanceRef').value = '';
+
+  populateOrderMeasurementDropdown(customerMeasurements[0]?.id || null);
+  drawCart();
+
+  switchCustomerTab('orders');
+  document.getElementById('orderEditorCard').classList.remove('hidden');
+  document.getElementById('orderEditorCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function useSnapshotForNewOrder(snapshotId) {
+  startNewOrder();
+  populateOrderMeasurementDropdown(snapshotId);
+  const snap = customerMeasurements.find(m => m.id === snapshotId);
+  if (snap) {
+    // Attempt to match product in dropdown
+    const opt = Array.from(document.querySelectorAll('#orderProduct option')).find(o =>
+      o.dataset.name?.toLowerCase().includes(snap.garment_type.toLowerCase())
+    );
+    if (opt) {
+      document.getElementById('orderProduct').value = opt.value;
+      updateRate();
+    }
+  }
+}
+
+async function openEditOrder(orderId) {
+  try {
+    const o = await API.get('/api/tailor/orders/' + orderId);
+    editingOrderId = o.id;
+
+    document.getElementById('orderEditorModeBadge').className = 'pill';
+    document.getElementById('orderEditorModeBadge').textContent = `Mode: Editing Order ${o.order_number}`;
+    document.getElementById('orderEditorTitle').textContent = `Update Order Instructions (${o.order_number})`;
+    document.getElementById('saveOrderBtn').textContent = '💾 Save Changes to Order';
+
+    // Populate fields
+    document.getElementById('orderDueDate').value = o.due_date || '';
+    document.getElementById('orderDiscount').value = Number(o.discount || 0);
+    document.getElementById('orderNotes').value = o.notes || '';
+
+    // Show status selector
+    document.getElementById('orderStatusFieldWrap').hidden = false;
+    document.getElementById('orderStatusSelect').value = o.status || 'NEW';
+
+    // Hide advance payment (already in database)
+    document.getElementById('advancePaymentSection').classList.add('hidden');
+
+    // Populate measurement snapshot
+    populateOrderMeasurementDropdown(o.measurement_id);
+
+    // Populate cart items
+    cart = (o.items || []).map(it => ({
+      productId: it.product_id,
+      name: it.item_name,
+      quantity: Number(it.quantity || 1),
+      defaultRate: Number(it.default_rate || 0),
+      rate: Number(it.unit_rate || 0),
+      unitRate: Number(it.unit_rate || 0),
+      adjustmentReason: it.adjustment_reason || ''
+    }));
+    drawCart();
+
+    switchCustomerTab('orders');
+    document.getElementById('orderEditorCard').classList.remove('hidden');
+    document.getElementById('orderEditorCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err) {
+    setNotice('#workspaceNotice', 'Failed to load order: ' + err.message);
+  }
+}
+
+function cancelOrderEditing() {
+  document.getElementById('orderEditorCard').classList.add('hidden');
+  editingOrderId = null;
+  cart = [];
+}
+
+// Products & Rates
 async function loadProducts() {
-  products = await API.get('/api/public/products');
-  const sel = document.getElementById('orderProduct');
-  sel.innerHTML = products.map(p =>
-    `<option value="${p.id}" data-name="${escapeHTML(p.name)}" data-rate="${p.default_rate}">
-      ${escapeHTML(p.name)} · ${money(p.default_rate)} ${p.product_type === 'READY_MADE' ? '(Stock)' : ''}
-    </option>`
-  ).join('');
-  updateRate();
+  try {
+    products = await API.get('/api/public/products');
+    const sel = document.getElementById('orderProduct');
+    sel.innerHTML = products.map(p =>
+      `<option value="${p.id}" data-name="${escapeHTML(p.name)}" data-rate="${p.default_rate}">
+        ${escapeHTML(p.name)} · ${money(p.default_rate)} ${p.product_type === 'READY_MADE' ? '(Ready-Made)' : ''}
+      </option>`
+    ).join('');
+    updateRate();
+  } catch (err) {
+    console.error('Failed to load products:', err);
+  }
 }
 
 function updateRate() {
@@ -267,13 +768,13 @@ function updateRate() {
 function addCartItem() {
   const p = products.find(p => p.id === val('orderProduct'));
   if (!p) {
-    setNotice('#orderNotice', 'No active service selected. Please configure products in Admin.');
+    setNotice('#orderEditorNotice', 'Please select a tailoring service.');
     return;
   }
   const qty = Number(val('orderQty'));
   const rate = Number(val('orderRate'));
   if (!Number.isInteger(qty) || qty < 1 || rate < 0 || !Number.isFinite(rate)) {
-    setNotice('#orderNotice', 'Please verify service quantity and rate.');
+    setNotice('#orderEditorNotice', 'Please specify a valid quantity and rate.');
     return;
   }
   const defaultRate = Number(p.default_rate || 0);
@@ -282,8 +783,8 @@ function addCartItem() {
     productId: p.id,
     name: p.name,
     quantity: qty,
-    defaultRate: defaultRate,
-    rate: rate,
+    defaultRate,
+    rate,
     unitRate: rate,
     adjustmentReason: (rate !== defaultRate ? (reason || 'Price adjusted by tailor') : '')
   });
@@ -291,278 +792,274 @@ function addCartItem() {
   drawCart();
 }
 
+function removeCartItem(idx) {
+  cart.splice(idx, 1);
+  drawCart();
+}
+
 function drawCart() {
-  const body = document.getElementById('cartRows');
-  body.innerHTML = cart.length ? cart.map((x, i) => {
+  const tbody = document.getElementById('cartTableBody');
+  tbody.innerHTML = cart.length ? cart.map((x, i) => {
     const isAdjusted = Number(x.rate) !== Number(x.defaultRate);
     return `
-    <tr>
-      <td>
-        <strong>${escapeHTML(x.name)}</strong>
-        ${isAdjusted ? `<br><small style="color:var(--orange)">⚠️ ${escapeHTML(x.adjustmentReason || 'Rate adjusted')}</small>` : ''}
-      </td>
-      <td>${money(x.defaultRate)}</td>
-      <td>
-        <strong>${money(x.rate)}</strong>
-        ${isAdjusted ? '<span class="pill" style="font-size:10px;margin-left:4px">Override</span>' : ''}
-      </td>
-      <td>${x.quantity}</td>
-      <td><strong>${money(x.rate * x.quantity)}</strong></td>
-      <td><button class="btn ghost" type="button" data-remove-cart="${i}">Remove</button></td>
-    </tr>
-  `}).join('') : '<tr><td colspan="6">No services added to bill yet.</td></tr>';
+      <tr>
+        <td>
+          <strong>${escapeHTML(x.name)}</strong>
+          ${isAdjusted ? `<br><small class="pill" style="font-size:10px;background:#fff2d6;color:#995400">Overridden: ${escapeHTML(x.adjustmentReason||'Custom rate')}</small>` : ''}
+        </td>
+        <td>${money(x.defaultRate)}</td>
+        <td>${money(x.rate)}</td>
+        <td>${x.quantity}</td>
+        <td><strong>${money(x.quantity * x.rate)}</strong></td>
+        <td><button class="btn ghost btn-sm" type="button" onclick="removeCartItem(${i})">✕</button></td>
+      </tr>`;
+  }).join('') : '<tr><td colspan="6">No services added to bill yet.</td></tr>';
 
-  body.querySelectorAll('[data-remove-cart]').forEach(b => {
-    b.onclick = () => {
-      cart.splice(Number(b.dataset.removeCart), 1);
-      drawCart();
-    };
-  });
+  const subtotal = cart.reduce((sum, it) => sum + (it.quantity * it.rate), 0);
+  const discount = Number(val('orderDiscount') || 0);
+  const net = Math.max(0, subtotal - discount);
 
-  const subtotal = cart.reduce((s, x) => s + x.rate * x.quantity, 0);
-  const discount = Math.max(0, Number(val('discount') || 0));
-  const total = Math.max(0, subtotal - discount);
-
-  document.getElementById('cartSubtotal').textContent = money(subtotal);
-  document.getElementById('cartTotal').textContent = money(total);
+  document.getElementById('cartSubtotalText').textContent = money(subtotal);
+  document.getElementById('cartTotalText').textContent = money(net);
 }
 
-function formatPaymentStatusBadge(status) {
-  const s = String(status || '').toUpperCase();
-  switch (s) {
-    case 'PAID':
-      return '<span class="pill" style="background:#e3f7eb;color:#18643d">Paid</span>';
-    case 'PARTIALLY_PAID':
-      return '<span class="pill" style="background:#fff2d6;color:#995400">Partially Paid</span>';
-    case 'REFUNDED':
-      return '<span class="pill" style="background:#eedaf7;color:#591873">Refunded</span>';
-    default:
-      return '<span class="pill orange">Payment Due</span>';
-  }
-}
-
-async function createOrder() {
+async function handleSaveOrder() {
   if (!currentCustomer) {
-    setNotice('#orderNotice', 'Select or save a customer first.');
-    return;
-  }
-  if (!currentMeasurement) {
-    setNotice('#orderNotice', 'Select or save at least one measurement snapshot before creating the bill.');
-    return;
-  }
-  if (!cart.length) {
-    setNotice('#orderNotice', 'Add at least one tailoring service item to the bill.');
+    setNotice('#orderEditorNotice', 'Select a customer first.');
     return;
   }
 
-  const advance = Number(val('advanceAmount') || 0);
-  const discount = Number(val('discount') || 0);
+  // If Editing an Existing Order
+  if (editingOrderId) {
+    const dueDate = val('orderDueDate');
+    const notes = val('orderNotes');
+    const measurementId = val('orderMeasurementSelect') || null;
+    const status = val('orderStatusSelect');
+
+    try {
+      const updated = await API.patch('/api/tailor/orders/' + editingOrderId, {
+        dueDate,
+        notes,
+        measurementId,
+        status
+      });
+      cancelOrderEditing();
+      await Promise.all([
+        loadCustomerOrders(currentCustomer.id),
+        loadRecentShopOrders()
+      ]);
+      setNotice('#workspaceNotice', `Order ${updated.order_number} updated successfully in database.`, true);
+      viewOrderBill(updated.id);
+    } catch (err) {
+      setNotice('#orderEditorNotice', err.message);
+    }
+    return;
+  }
+
+  // If Creating a New Order
+  if (!cart.length) {
+    setNotice('#orderEditorNotice', 'Please add at least one tailoring service to the bill.');
+    return;
+  }
+
+  const payload = {
+    customerId: currentCustomer.id,
+    measurementId: val('orderMeasurementSelect') || null,
+    dueDate: val('orderDueDate') || null,
+    notes: val('orderNotes') || null,
+    discount: Number(val('orderDiscount') || 0),
+    advanceAmount: Number(val('orderAdvanceAmount') || 0),
+    advanceMethod: val('orderAdvanceMethod'),
+    advanceRef: val('orderAdvanceRef') || null,
+    items: cart
+  };
 
   try {
-    const result = await API.post('/api/tailor/orders', {
-      customerId: currentCustomer.id,
-      measurementId: currentMeasurement,
-      dueDate: val('dueDate') || null,
-      notes: val('orderNotes'),
-      discount: discount,
-      advanceAmount: advance,
-      advanceMethod: val('advanceMethod'),
-      advanceRef: val('advanceRef'),
-      items: cart.map(x => ({
-        productId: x.productId,
-        name: x.name,
-        quantity: x.quantity,
-        defaultRate: x.defaultRate,
-        rate: x.rate,
-        unitRate: x.rate,
-        adjustmentReason: x.adjustmentReason
-      }))
-    });
-
-    renderInvoiceAndSharing(result);
-    setNotice('#orderNotice', `Bill ${result.order_number} saved successfully in PostgreSQL!`, true);
-    cart = [];
-    drawCart();
-    document.getElementById('advanceAmount').value = '0';
-    document.getElementById('advanceRef').value = '';
-    await loadOrders();
-    if (currentCustomer) await loadCustomerOrdersHistory(currentCustomer.id);
+    const created = await API.post('/api/tailor/orders', payload);
+    cancelOrderEditing();
+    await Promise.all([
+      loadCustomerOrders(currentCustomer.id),
+      loadRecentShopOrders()
+    ]);
+    setNotice('#workspaceNotice', `Order ${created.order_number} generated successfully in database.`, true);
+    viewOrderBill(created.id);
   } catch (err) {
-    setNotice('#orderNotice', err.message);
+    setNotice('#orderEditorNotice', err.message);
   }
 }
 
-function renderInvoiceAndSharing(result) {
-  const customerPhone = whatsappDigits(currentCustomer ? currentCustomer.phone : result.phone);
-  const due = Number(result.total) - Number(result.amount_paid);
-  const billUrl = `${window.location.origin}/bill.html?id=${result.id}`;
-  const adminPhone = paymentQrData.adminNotificationPhone ? whatsappDigits(paymentQrData.adminNotificationPhone) : '';
+async function updateOrderStatus(orderId, newStatus) {
+  try {
+    await API.patch('/api/tailor/orders/' + orderId + '/status', { status: newStatus });
+    if (currentCustomer) await loadCustomerOrders(currentCustomer.id);
+    await loadRecentShopOrders();
+    setNotice('#workspaceNotice', `Order status updated to ${ORDER_STATUS_LABELS[newStatus]||newStatus}.`, true);
+  } catch (err) {
+    alert('Failed to update status: ' + err.message);
+  }
+}
 
-  const customerMessage = [
-    `*${shopSettings.shop_name || 'Jolly Ladies Tailor'}*`,
-    `Invoice: *${result.order_number}*`,
-    `Customer: ${currentCustomer ? currentCustomer.name : result.customer}`,
-    `Date: ${new Date().toLocaleDateString()}`,
-    result.due_date ? `Promised Delivery: ${result.due_date}` : '',
-    `--------------------------`,
-    ...(result.items || cart).map(i => `• ${i.item_name || i.name} x ${i.quantity}: ${money(i.amount || (i.unit_rate || i.rate) * i.quantity)}`),
-    `--------------------------`,
-    `Total: ${money(result.total)}`,
-    Number(result.amount_paid) > 0 ? `Paid / Advance: ${money(result.amount_paid)}` : '',
-    `Outstanding Due: ${money(due)}`,
-    `Status: ${result.status}`,
-    `\n📄 View or print your e-Bill online:\n${billUrl}`,
-    `\nThank you for choosing ${shopSettings.shop_name || 'Jolly Ladies Tailor'}!`
-  ].filter(Boolean).join('\n');
+// Bill Invoice View & WhatsApp Delivery
+async function viewOrderBill(orderId) {
+  try {
+    const o = await API.get('/api/tailor/orders/' + orderId);
+    const card = document.getElementById('orderBillResultCard');
+    card.classList.remove('hidden');
 
-  const adminAlertMessage = [
-    `🔔 *NEW BILL / PAYMENT UPDATE*`,
-    `Shop: ${shopSettings.shop_name || 'Jolly Ladies Tailor'}`,
-    `Bill #: *${result.order_number}*`,
-    `Customer: ${currentCustomer ? currentCustomer.name : result.customer} (${currentCustomer ? currentCustomer.phone : result.phone})`,
-    `Total: ${money(result.total)}`,
-    `Paid: ${money(result.amount_paid)}`,
-    `Due: ${money(due)}`,
-    result.due_date ? `Delivery Date: ${result.due_date}` : '',
-    `Link: ${billUrl}`
-  ].filter(Boolean).join('\n');
+    const d = new Date(o.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+    const dueD = o.due_date ? new Date(o.due_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'As agreed';
 
-  const row = document.getElementById('orderResult');
-  row.classList.remove('hidden');
-  row.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <div>
-        <h3 style="margin:0;color:var(--violet)">Bill Created: ${escapeHTML(result.order_number)}</h3>
-        <p class="muted" style="margin:4px 0">Customer: <strong>${escapeHTML(currentCustomer ? currentCustomer.name : result.customer)}</strong> · Due: <strong>${money(due)}</strong></p>
-      </div>
-      <div class="form-actions" style="margin:0;gap:8px;flex-wrap:wrap">
-        <button class="btn orange" id="shareBill" type="button">📲 Share e-Bill with Customer (WhatsApp)</button>
-        ${adminPhone ? `<button class="btn light" id="notifyAdminBill" type="button">🔔 Send Alert to Admin (WhatsApp)</button>` : ''}
-        <button class="btn ghost" id="viewFullBill" type="button">🔗 View e-Bill Page</button>
-        <button class="btn ghost" id="copyBillText" type="button">📋 Copy Text</button>
-        <button class="btn" id="printBill" type="button">🖨️ Print Invoice / PDF</button>
-      </div>
-    </div>
-
-    <!-- Printable Invoice Structure -->
-    <div class="preview" id="printableBill" style="margin-top:16px;background:#fff;padding:24px;border-radius:12px;border:1px solid #ccc;color:#000">
-      <div style="text-align:center;border-bottom:2px solid var(--violet);padding-bottom:12px">
-        <h2 style="margin:0;font-family:Georgia,serif;color:var(--violet);font-size:26px">${escapeHTML(shopSettings.shop_name || 'Jolly Ladies Tailor')}</h2>
-        <p style="margin:4px 0;font-size:13px">${escapeHTML(shopSettings.shop_address || 'Kolkata, West Bengal')}</p>
-        <p style="margin:4px 0;font-size:13px">Phone: ${escapeHTML(shopSettings.shop_phone || '')} · WhatsApp: ${escapeHTML(shopSettings.whatsapp_number || '')}</p>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;margin:16px 0;font-size:13px;flex-wrap:wrap;gap:12px">
+    card.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px">
         <div>
-          <strong>Billed To:</strong><br>
-          ${escapeHTML(currentCustomer ? currentCustomer.name : result.customer)}<br>
-          Phone: ${escapeHTML(currentCustomer ? currentCustomer.phone : result.phone)}<br>
-          ${(currentCustomer && currentCustomer.address) ? escapeHTML(currentCustomer.address) : ''}
+          <div class="eyebrow" style="color:var(--orange)">Bill & Invoice Preview</div>
+          <h2 style="margin:2px 0;font-family:Georgia,serif;color:var(--violet)">${escapeHTML(o.order_number)}</h2>
+          <small class="muted">Customer: <strong>${escapeHTML(o.customer)}</strong> (${escapeHTML(o.phone)}) · Order Date: ${d}</small>
         </div>
-        <div style="text-align:right">
-          <strong>Bill No:</strong> ${escapeHTML(result.order_number)}<br>
-          <strong>Date:</strong> ${new Date().toLocaleDateString()}<br>
-          ${result.due_date ? `<strong>Delivery Date:</strong> ${result.due_date}<br>` : ''}
-          <strong>Order Status:</strong> ${escapeHTML(result.status)}<br>
-          <strong>Payment:</strong> ${escapeHTML(result.payment_status || 'PAYMENT_DUE')}
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn ghost btn-sm" type="button" onclick="document.getElementById('orderBillResultCard').classList.add('hidden')">✕ Close</button>
+          <button class="btn light btn-sm" type="button" onclick="shareWhatsAppOrder('${o.id}')">💬 WhatsApp e-Bill</button>
+          <button class="btn orange btn-sm" type="button" onclick="printOrderInvoice('${o.id}')">🖨️ Print Invoice</button>
         </div>
       </div>
 
-      <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:13px">
-        <thead>
-          <tr style="background:#f3e8f4;border-bottom:1px solid #999">
-            <th style="padding:8px;text-align:left">Service Item</th>
-            <th style="padding:8px;text-align:center">Qty</th>
-            <th style="padding:8px;text-align:right">Rate</th>
-            <th style="padding:8px;text-align:right">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${(result.items || cart).map(x => `
-            <tr style="border-bottom:1px solid #eee">
-              <td style="padding:8px">${escapeHTML(x.item_name || x.name)}</td>
-              <td style="padding:8px;text-align:center">${x.quantity}</td>
-              <td style="padding:8px;text-align:right">${money(x.unit_rate || x.rate)}</td>
-              <td style="padding:8px;text-align:right">${money(x.amount || (x.unit_rate || x.rate) * x.quantity)}</td>
+      <div style="background:#fdf9fd;border-radius:12px;padding:14px;border:1px solid #ebd3e8;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:8px">
+          <span>Status: <strong class="status-badge status-${o.status}">${ORDER_STATUS_LABELS[o.status]||o.status}</strong></span>
+          <span>Payment: <strong class="status-badge pay-${o.payment_status}">${formatPayBadge(o.payment_status)}</strong></span>
+          <span>Delivery Due: <strong>${dueD}</strong></span>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Item / Service</th>
+              <th>Rate</th>
+              <th>Qty</th>
+              <th>Amount</th>
             </tr>
-          `).join('')}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            ${(o.items || []).map(it => `
+              <tr>
+                <td>
+                  <strong>${escapeHTML(it.item_name)}</strong>
+                  ${it.adjustment_reason ? `<br><small class="muted">Reason: ${escapeHTML(it.adjustment_reason)}</small>` : ''}
+                </td>
+                <td>${money(it.unit_rate)}</td>
+                <td>${it.quantity}</td>
+                <td>${money(it.amount)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
 
-      <div style="display:flex;justify-content:flex-end;margin-top:12px">
-        <div style="min-width:240px;font-size:14px;line-height:1.6">
-          <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span>${money(result.subtotal || result.total)}</span></div>
-          ${Number(result.discount) > 0 ? `<div style="display:flex;justify-content:space-between"><span>Discount:</span><span>- ${money(result.discount)}</span></div>` : ''}
-          <div style="display:flex;justify-content:space-between;border-top:1px solid #444;font-weight:700;padding-top:4px">
-            <span>Net Total:</span><span>${money(result.total)}</span>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px">
+        <div style="width:260px;font-size:14px;line-height:1.8">
+          <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span>${money(o.subtotal)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Discount:</span><span>-${money(o.discount)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;color:var(--violet);border-top:1.5px solid var(--violet);padding-top:4px">
+            <span>Net Total:</span><span>${money(o.total)}</span>
           </div>
-          <div style="display:flex;justify-content:space-between"><span>Amount Paid:</span><span>${money(result.amount_paid)}</span></div>
-          <div style="display:flex;justify-content:space-between;font-weight:700;color:#c00;border-top:1px dashed #999;padding-top:4px">
-            <span>Balance Due:</span><span>${money(due)}</span>
+          <div style="display:flex;justify-content:space-between;color:var(--green)"><span>Paid:</span><span>${money(o.amount_paid)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:700;color:#b30000;border-top:1px dashed #ccc;padding-top:4px">
+            <span>Balance Due:</span><span>${money(o.due)}</span>
           </div>
         </div>
       </div>
+    `;
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err) {
+    alert('Failed to preview bill: ' + err.message);
+  }
+}
 
-      <div style="margin-top:20px;text-align:center;font-size:12px;color:#777;border-top:1px solid #eee;padding-top:8px">
-        Thank you for choosing ${escapeHTML(shopSettings.shop_name || 'Jolly Ladies Tailor')}! Stitched with care to fit you.
-      </div>
-    </div>
-  `;
-
-  document.getElementById('shareBill').onclick = () => {
-    if (!customerPhone) {
-      alert('Customer phone number is missing or invalid.');
+async function shareWhatsAppOrder(orderId) {
+  try {
+    const o = await API.get('/api/tailor/orders/' + orderId);
+    const phone = whatsappDigits(o.phone);
+    if (!phone) {
+      alert('Valid customer phone number is required for WhatsApp delivery.');
       return;
     }
-    window.open(`https://wa.me/${customerPhone}?text=${encodeURIComponent(customerMessage)}`, '_blank', 'noopener,noreferrer');
-  };
-
-  const adminBtn = document.getElementById('notifyAdminBill');
-  if (adminBtn) {
-    adminBtn.onclick = () => {
-      window.open(`https://wa.me/${adminPhone}?text=${encodeURIComponent(adminAlertMessage)}`, '_blank', 'noopener,noreferrer');
-    };
+    const billUrl = `${location.origin}/bill.html?id=${o.id}`;
+    const text = `Namaste ${o.customer}! Your stitching bill ${o.order_number} from Jolly Ladies Tailor has been generated.\n\nTotal: ${money(o.total)}\nPaid: ${money(o.amount_paid)}\nBalance Due: ${money(o.due)}\n\nView and download your digital e-bill here:\n${billUrl}\n\nThank you for choosing Jolly Ladies Tailor!`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+  } catch (err) {
+    alert('WhatsApp sharing failed: ' + err.message);
   }
+}
 
-  document.getElementById('viewFullBill').onclick = () => {
-    window.open(billUrl, '_blank');
-  };
-
-  document.getElementById('copyBillText').onclick = () => {
-    navigator.clipboard.writeText(customerMessage).then(() => {
-      alert('E-bill text copied to clipboard!');
-    }).catch(() => {
-      prompt('Copy the bill text below:', customerMessage);
-    });
-  };
-
-  document.getElementById('printBill').onclick = () => {
-    const printable = document.getElementById('printableBill');
+async function printOrderInvoice(orderId) {
+  try {
+    const o = await API.get('/api/tailor/orders/' + orderId);
     const w = window.open('', '_blank');
     w.document.write(`
       <!doctype html>
       <html>
-        <head>
-          <title>Invoice - ${escapeHTML(result.order_number)}</title>
-          <style>
-            body { font-family: Inter, Arial, sans-serif; margin: 20px; color: #000; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background: #f2e4f2; }
-            @media print { body { margin: 0; } }
-          </style>
-        </head>
-        <body>
-          ${printable.outerHTML}
-        </body>
+      <head>
+        <title>Invoice - ${escapeHTML(o.order_number)}</title>
+        <style>
+          body { font-family: Inter, Arial, sans-serif; padding: 24px; color: #333; }
+          .header { text-align: center; border-bottom: 2px solid #400849; padding-bottom: 12px; margin-bottom: 20px; }
+          .header h1 { margin: 0; color: #400849; }
+          table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+          th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+          th { background: #fdf2f8; color: #400849; }
+          .totals { width: 280px; margin-left: auto; font-size: 14px; line-height: 1.8; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Jolly Ladies Tailor</h1>
+          <p>Custom Ladies Tailoring & Alteration Specialist · Southern Avenue, Kolkata</p>
+          <p><strong>Invoice / Bill: ${escapeHTML(o.order_number)}</strong></p>
+        </div>
+        <div>
+          <p><strong>Customer:</strong> ${escapeHTML(o.customer)} (${escapeHTML(o.phone)})</p>
+          <p><strong>Date:</strong> ${new Date(o.created_at).toLocaleDateString('en-IN')}</p>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Service / Item</th><th>Rate</th><th>Qty</th><th>Total</th></tr>
+          </thead>
+          <tbody>
+            ${(o.items || []).map(it => `
+              <tr>
+                <td>${escapeHTML(it.item_name)}</td>
+                <td>${money(it.unit_rate)}</td>
+                <td>${it.quantity}</td>
+                <td>${money(it.amount)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="totals">
+          <div>Subtotal: <strong>${money(o.subtotal)}</strong></div>
+          <div>Discount: <strong>-${money(o.discount)}</strong></div>
+          <div style="font-size:16px;border-top:1px solid #333;margin-top:4px;padding-top:4px">Net Total: <strong>${money(o.total)}</strong></div>
+          <div>Paid: <strong>${money(o.amount_paid)}</strong></div>
+          <div style="color:#b30000;font-weight:700">Due Balance: ${money(o.due)}</div>
+        </div>
+        <p style="text-align:center;margin-top:30px;font-size:12px;color:#777">Thank you for stitching with Jolly Ladies Tailor!</p>
+      </body>
       </html>
     `);
     w.document.close();
     w.focus();
-    setTimeout(() => { w.print(); }, 250);
-  };
+    setTimeout(() => w.print(), 300);
+  } catch (err) {
+    alert('Print failed: ' + err.message);
+  }
 }
 
+// ============================================================================
+// PAYMENTS & IN-SHOP GPAY QR: Step E
+// ============================================================================
 async function loadPaymentQr() {
   try {
     paymentQrData = await API.get('/api/tailor/payment-qr');
@@ -572,7 +1069,7 @@ async function loadPaymentQr() {
     if (paymentQrData.upiId) {
       document.getElementById('tailorQrUpiId').textContent = 'UPI ID: ' + paymentQrData.upiId;
     } else {
-      document.getElementById('tailorQrUpiId').textContent = 'UPI ID: Not configured in Admin';
+      document.getElementById('tailorQrUpiId').textContent = 'UPI ID: Configured in Admin Console';
     }
     const img = document.getElementById('tailorGpayQrImg');
     if (paymentQrData.gpayQrUrl) {
@@ -586,238 +1083,259 @@ async function loadPaymentQr() {
   }
 }
 
-function updateQrDueAmount() {
-  const sel = document.getElementById('paymentOrder');
+function populatePaymentOrderDropdown() {
+  const sel = document.getElementById('paymentOrderSelect');
   if (!sel) return;
-  const ord = orders.find(o => o.id === sel.value);
-  const dueEl = document.getElementById('tailorQrDueAmount');
-  if (ord && dueEl) {
-    dueEl.textContent = `Amount to Collect: ${money(ord.due)} (${ord.order_number})`;
-  } else if (dueEl) {
-    dueEl.textContent = '';
+
+  const dueOrders = customerOrders.filter(o => Number(o.due) > 0);
+  sel.innerHTML = dueOrders.length ? dueOrders.map(o => `
+    <option value="${o.id}">${escapeHTML(o.order_number)} · Due: ${money(o.due)}</option>
+  `).join('') : '<option value="">No orders with due balance</option>';
+
+  if (dueOrders[0]) {
+    selectPaymentOrder(dueOrders[0].id);
+  } else {
+    document.getElementById('paymentAmountInput').value = '';
+    document.getElementById('tailorQrDueAmount').textContent = '';
+  }
+
+  renderCustomerPaymentLedger();
+}
+
+function selectPaymentOrder(orderId) {
+  const sel = document.getElementById('paymentOrderSelect');
+  sel.value = orderId;
+  const o = customerOrders.find(x => x.id === orderId);
+  if (o) {
+    document.getElementById('paymentAmountInput').value = Number(o.due).toFixed(2);
+    document.getElementById('tailorQrDueAmount').textContent = `Amount to Collect: ${money(o.due)} (${o.order_number})`;
   }
 }
 
-async function loadOrders() {
+async function renderCustomerPaymentLedger() {
+  const tbody = document.getElementById('customerPaymentsLedgerBody');
+  if (!tbody || !currentCustomer) return;
+
   try {
-    orders = await API.get('/api/tailor/orders');
-    const body = document.getElementById('ordersRows');
-
-    body.innerHTML = orders.length ? orders.map(o => `
-      <tr>
-        <td><strong>${escapeHTML(o.order_number)}</strong></td>
-        <td>${escapeHTML(o.customer)}<br><small class="muted">${escapeHTML(o.phone)}</small></td>
-        <td>
-          <select data-status="${o.id}">
-            ${ORDER_STATUSES.map(s => `
-              <option value="${s.value}" ${s.value === o.status ? 'selected' : ''}>${s.label}</option>
-            `).join('')}
-          </select>
-        </td>
-        <td>${formatPaymentStatusBadge(o.payment_status)}</td>
-        <td>${money(o.total)}</td>
-        <td>${money(o.amount_paid)}</td>
-        <td><strong>${money(o.due)}</strong></td>
-        <td>${o.due_date ? escapeHTML(o.due_date) : '—'}</td>
-        <td>
-          <div style="display:flex;gap:4px;flex-wrap:wrap">
-            <button class="btn ghost" type="button" data-wa-order="${o.id}">WhatsApp</button>
-            <button class="btn ghost" type="button" data-view-order="${o.id}">Invoice</button>
-            <a class="btn light" href="/bill.html?id=${o.id}" target="_blank" rel="noopener" style="padding:4px 8px;font-size:12px">e-Bill ↗</a>
-          </div>
-        </td>
-      </tr>
-    `).join('') : '<tr><td colspan="9">No orders recorded yet.</td></tr>';
-
-    body.querySelectorAll('[data-status]').forEach(sel => {
-      sel.onchange = async () => {
-        try {
-          await API.patch('/api/tailor/orders/' + sel.dataset.status + '/status', { status: sel.value });
-        } catch (e) {
-          alert(e.message);
-          await loadOrders();
-        }
-      };
-    });
-
-    body.querySelectorAll('[data-wa-order]').forEach(btn => {
-      btn.onclick = async () => {
-        try {
-          const o = await API.get('/api/tailor/orders/' + btn.dataset.waOrder);
-          const phone = whatsappDigits(o.phone);
-          const billUrl = `${window.location.origin}/bill.html?id=${o.id}`;
-          const msg = [
-            `*${shopSettings.shop_name || 'Jolly Ladies Tailor'}*`,
-            `E-bill: *${o.order_number}*`,
-            `Customer: ${o.customer}`,
-            `Status: ${o.status}`,
-            `Total: ${money(o.total)}`,
-            `Paid: ${money(o.amount_paid)}`,
-            `Due: ${money(o.due)}`,
-            `\n📄 View complete e-Bill:\n${billUrl}`,
-            `\nThank you!`
-          ].filter(Boolean).join('\n');
-          if (phone) {
-            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
-          } else {
-            alert('Customer phone number is missing.');
-          }
-        } catch (e) {
-          alert(e.message);
-        }
-      };
-    });
-
-    body.querySelectorAll('[data-view-order]').forEach(btn => {
-      btn.onclick = async () => {
-        try {
-          const ord = await API.get('/api/tailor/orders/' + btn.dataset.viewOrder);
-          renderInvoiceAndSharing(ord);
-          window.scrollTo({ top: document.getElementById('orderResult').offsetTop - 50, behavior: 'smooth' });
-        } catch (e) {
-          alert(e.message);
-        }
-      };
-    });
-
-    // Populate Payment Order Dropdown
-    const open = orders.filter(o => Number(o.due) > 0);
-    const sel = document.getElementById('paymentOrder');
-    sel.innerHTML = open.map(o => `
-      <option value="${o.id}">
-        ${escapeHTML(o.order_number)} · ${escapeHTML(o.customer)} · Due: ${money(o.due)}
-      </option>
-    `).join('') || '<option value="">No outstanding orders</option>';
-
-    if (open[0]) {
-      document.getElementById('paymentAmount').value = Number(open[0].due).toFixed(2);
+    // Collect all payments across customer orders
+    const allPayments = [];
+    for (const ord of customerOrders) {
+      if (ord.payments && ord.payments.length) {
+        ord.payments.forEach(p => allPayments.push({...p, orderNumber: ord.order_number}));
+      }
     }
-    updateQrDueAmount();
+    allPayments.sort((a,b) => new Date(b.received_at) - new Date(a.received_at));
+
+    if (!allPayments.length) {
+      tbody.innerHTML = '<tr><td colspan="6">No payment transactions recorded for this customer yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = allPayments.map(p => `
+      <tr>
+        <td>${new Date(p.received_at).toLocaleDateString('en-IN', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</td>
+        <td><strong>${escapeHTML(p.orderNumber)}</strong></td>
+        <td><span class="pill">${escapeHTML(p.payment_type || 'PAYMENT')}</span></td>
+        <td>${escapeHTML(p.method)}</td>
+        <td><strong style="color:var(--green)">${money(p.amount)}</strong></td>
+        <td><small class="muted">${escapeHTML(p.reference || p.note || '—')}</small></td>
+      </tr>
+    `).join('');
   } catch (err) {
-    console.error('Failed to load orders', err);
-  }
-}
-  } catch (err) {
-    console.error('Failed to load orders', err);
+    console.error('Ledger rendering error:', err);
   }
 }
 
-async function recordPaymentOrRefund(e) {
+async function handleRecordPayment(e) {
   e.preventDefault();
-  const id = val('paymentOrder');
-  if (!id) {
-    setNotice('#paymentNotice', 'Please select an order from the list.');
+  const orderId = val('paymentOrderSelect');
+  if (!orderId) {
+    setNotice('#paymentNotice', 'Please select an order with an outstanding balance.');
     return;
   }
   const type = val('paymentTypeSelect');
-  const amount = Number(val('paymentAmount'));
+  const amount = Number(val('paymentAmountInput'));
+  const method = val('paymentMethodSelect');
+  const reference = val('paymentRefInput');
+
+  if (amount <= 0 || !Number.isFinite(amount)) {
+    setNotice('#paymentNotice', 'Please enter a valid amount greater than zero.');
+    return;
+  }
 
   try {
     if (type === 'REFUND') {
-      await API.post('/api/tailor/orders/' + id + '/refunds', {
-        amount: amount,
-        reason: val('paymentRef') || 'Customer requested refund'
+      await API.post(`/api/tailor/orders/${orderId}/refunds`, {
+        amount,
+        reason: reference || 'Customer requested refund'
       });
-      setNotice('#paymentNotice', `Refund of ${money(amount)} recorded successfully.`, true);
+      setNotice('#paymentNotice', `Refund of ${money(amount)} recorded successfully in database.`, true);
     } else {
-      await API.post('/api/tailor/orders/' + id + '/payments', {
-        amount: amount,
-        method: val('paymentMethod'),
-        reference: val('paymentRef')
+      await API.post(`/api/tailor/orders/${orderId}/payments`, {
+        amount,
+        method,
+        reference
       });
       setNotice('#paymentNotice', `Payment of ${money(amount)} recorded in database. Verify UPI arrival in GPay.`, true);
     }
-    await loadOrders();
-    if (currentCustomer) await loadCustomerOrdersHistory(currentCustomer.id);
+
+    document.getElementById('paymentRefInput').value = '';
+    await Promise.all([
+      loadCustomerOrders(currentCustomer.id),
+      loadRecentShopOrders()
+    ]);
   } catch (err) {
     setNotice('#paymentNotice', err.message);
   }
 }
 
-async function loadInitial() {
+// ============================================================================
+// RECENT SHOP-WIDE ORDERS
+// ============================================================================
+async function loadRecentShopOrders() {
   try {
-    shopSettings = await API.get('/api/public/shop').catch(() => ({}));
-    await Promise.all([
-      loadPaymentQr(),
-      loadCustomers(),
-      loadProducts(),
-      loadOrders()
-    ]);
-    drawMeasurementFields();
-    drawCart();
-  } catch (e) {
-    document.getElementById('workspace').classList.add('hidden');
-    document.getElementById('loginPanel').classList.remove('hidden');
-    setNotice('#loginNotice', e.message);
+    shopOrders = await API.get('/api/tailor/orders');
+    const tbody = document.getElementById('recentShopOrdersRows');
+    if (!shopOrders.length) {
+      tbody.innerHTML = '<tr><td colspan="9">No orders recorded in the shop yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = shopOrders.slice(0, 15).map(o => `
+      <tr>
+        <td><strong>${escapeHTML(o.order_number)}</strong></td>
+        <td>
+          <a href="#" onclick="selectCustomer('${o.customer_id}');return false;" style="font-weight:700;color:var(--violet)">
+            ${escapeHTML(o.customer)}
+          </a>
+          <br><small class="muted">${escapeHTML(o.phone)}</small>
+        </td>
+        <td><span class="status-badge status-${o.status}">${ORDER_STATUS_LABELS[o.status]||o.status}</span></td>
+        <td><span class="status-badge pay-${o.payment_status}">${formatPayBadge(o.payment_status)}</span></td>
+        <td>${money(o.total)}</td>
+        <td>${money(o.amount_paid)}</td>
+        <td><strong>${money(o.due)}</strong></td>
+        <td>${o.due_date ? escapeHTML(o.due_date) : '—'}</td>
+        <td>
+          <div style="display:flex;gap:4px">
+            <button class="btn light btn-sm" type="button" onclick="selectCustomer('${o.customer_id}')">Open Hub</button>
+            <button class="btn ghost btn-sm" type="button" onclick="viewOrderBill('${o.id}')">Invoice</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    console.error('Failed to load shop orders:', err);
   }
 }
 
-function logout() {
-  API.post('/api/auth/logout', {}).finally(() => location.reload());
+// Helpers
+function formatPayBadge(status) {
+  if (status === 'PAID') return 'Fully Paid';
+  if (status === 'PARTIALLY_PAID') return 'Partially Paid';
+  if (status === 'REFUNDED') return 'Refunded';
+  return 'Payment Due';
 }
 
+// ============================================================================
 // Event Bindings
-document.getElementById('loginForm').addEventListener('submit', doLogin);
-document.getElementById('customerForm').addEventListener('submit', saveCustomer);
-document.getElementById('newCustomer').addEventListener('click', () => {
-  currentCustomer = null;
-  currentMeasurement = null;
-  document.getElementById('customerSelect').value = '';
-  drawMeasurementFields();
-  document.getElementById('measureNotes').value = '';
-  document.getElementById('fit').value = 'Regular';
-  document.getElementById('cName').value = '';
-  document.getElementById('cPhone').value = '';
-  document.getElementById('cAddress').value = '';
-  document.getElementById('cNotes').value = '';
-  document.getElementById('measurementFieldset').disabled = true;
-  document.getElementById('measurementLock').hidden = false;
-  document.getElementById('currentCustomer').hidden = true;
-  document.getElementById('customerOrdersBox').classList.add('hidden');
-  document.getElementById('measureHistory').innerHTML = '<tr><td colspan="4">Save a customer first.</td></tr>';
-});
-document.getElementById('measurementForm').addEventListener('submit', saveMeasurement);
-document.getElementById('garment').addEventListener('change', drawMeasurementFields);
-document.getElementById('unit').addEventListener('change', () => {
-  const u = val('unit') === 'in' ? 'Inches' : 'cm';
-  document.querySelectorAll('[data-measure]').forEach(input => input.placeholder = u);
-});
-document.getElementById('customerSelect').addEventListener('change', e => {
-  chooseCustomer(e.target.value).catch(err => setNotice('#customerNotice', err.message));
-});
-document.getElementById('customerSearch').addEventListener('change', () => {
-  loadCustomers(val('customerSearch')).catch(e => setNotice('#customerNotice', e.message));
-});
-document.getElementById('orderProduct').addEventListener('change', updateRate);
-document.getElementById('addOrderItem').addEventListener('click', addCartItem);
-document.getElementById('createOrder').addEventListener('click', createOrder);
-document.getElementById('discount').addEventListener('input', drawCart);
-document.getElementById('paymentOrder').addEventListener('change', () => {
-  const ord = orders.find(o => o.id === val('paymentOrder'));
-  if (ord) {
-    document.getElementById('paymentAmount').value = Number(ord.due).toFixed(2);
-  }
-  updateQrDueAmount();
-});
-document.getElementById('toggleGpayQrBtn').addEventListener('click', () => {
-  const p = document.getElementById('shopGpayQrDisplay');
-  p.classList.toggle('hidden');
-  updateQrDueAmount();
-});
-document.getElementById('paymentForm').addEventListener('submit', recordPaymentOrRefund);
-document.getElementById('refreshOrders').addEventListener('click', loadOrders);
-document.getElementById('logout').addEventListener('click', logout);
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  // Auth
+  document.getElementById('loginForm').addEventListener('submit', doLogin);
+  document.getElementById('logout').addEventListener('click', logout);
 
-// Auto-session check on page load
-(async () => {
-  try {
-    const me = await API.get('/api/auth/me');
-    document.getElementById('loginPanel').classList.add('hidden');
-    document.getElementById('workspace').classList.remove('hidden');
-    document.getElementById('logout').classList.remove('hidden');
-    document.getElementById('whoami').textContent = `${me.username} · ${me.role}`;
-    await loadInitial();
-  } catch (e) {
-    /* Anonymous visitor */
-  }
-})();
+  // Workflow Navigation
+  document.getElementById('stepNav1').addEventListener('click', switchBackToCustomerSearch);
+  document.getElementById('stepNav2').addEventListener('click', () => {
+    if (currentCustomer) switchCustomerTab('overview');
+  });
+  document.getElementById('stepNav3').addEventListener('click', () => {
+    if (currentCustomer) switchCustomerTab('orders');
+  });
+
+  // Step 1: Customer Search
+  const searchInput = document.getElementById('customerSearchInput');
+  searchInput.addEventListener('input', e => {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => searchCustomers(e.target.value.trim()), 250);
+  });
+  document.getElementById('searchBtn').addEventListener('click', () => searchCustomers(val('customerSearchInput')));
+
+  // Step 1: Add New Customer
+  document.getElementById('showNewCustomerBtn').addEventListener('click', () => openNewCustomerForm());
+  document.getElementById('cancelNewCustomerBtn').addEventListener('click', closeNewCustomerForm);
+  document.getElementById('cancelNewCustomerBtn2').addEventListener('click', closeNewCustomerForm);
+  document.getElementById('newCustomerForm').addEventListener('submit', handleRegisterCustomer);
+  document.getElementById('newCustPhone').addEventListener('input', e => checkDuplicatePhone(e.target.value.trim()));
+
+  // Step 2: Customer Hub
+  document.getElementById('hubEditCustomerBtn').addEventListener('click', openEditCustomerBox);
+  document.getElementById('cancelEditCustomerBtn').addEventListener('click', closeEditCustomerBox);
+  document.getElementById('cancelEditCustomerBtn2').addEventListener('click', closeEditCustomerBox);
+  document.getElementById('editCustomerForm').addEventListener('submit', handleSaveCustomerEdits);
+
+  document.getElementById('hubNewOrderBtn').addEventListener('click', startNewOrder);
+  document.getElementById('overviewStartOrderBtn').addEventListener('click', startNewOrder);
+  document.getElementById('tabOrdersNewOrderBtn').addEventListener('click', startNewOrder);
+  document.getElementById('hubSwitchCustomerBtn').addEventListener('click', switchBackToCustomerSearch);
+  document.getElementById('switchCustomerTopBtn').addEventListener('click', switchBackToCustomerSearch);
+
+  // Tabs
+  document.getElementById('tabBtnOverview').addEventListener('click', () => switchCustomerTab('overview'));
+  document.getElementById('tabBtnMeasurements').addEventListener('click', () => switchCustomerTab('measurements'));
+  document.getElementById('tabBtnOrders').addEventListener('click', () => switchCustomerTab('orders'));
+  document.getElementById('tabBtnPayments').addEventListener('click', () => switchCustomerTab('payments'));
+
+  // Garment selector buttons in measurements
+  document.querySelectorAll('.garment-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => selectGarmentTab(btn.dataset.garment));
+  });
+
+  // Measurement Form
+  document.getElementById('takeFreshMeasureBtn').addEventListener('click', () => openMeasurementForm(selectedGarment));
+  document.getElementById('closeMeasureFormBtn').addEventListener('click', closeMeasurementForm);
+  document.getElementById('cancelMeasureFormBtn').addEventListener('click', closeMeasurementForm);
+  document.getElementById('measureGarmentSelect').addEventListener('change', e => {
+    drawDynamicMeasurementFields(e.target.value);
+  });
+  document.getElementById('measureUnitSelect').addEventListener('change', () => {
+    drawDynamicMeasurementFields(val('measureGarmentSelect'));
+  });
+  document.getElementById('recordMeasurementForm').addEventListener('submit', handleSaveMeasurement);
+
+  // Order Editor
+  document.getElementById('orderProduct').addEventListener('change', updateRate);
+  document.getElementById('addOrderItemBtn').addEventListener('click', addCartItem);
+  document.getElementById('orderDiscount').addEventListener('input', drawCart);
+  document.getElementById('saveOrderBtn').addEventListener('click', handleSaveOrder);
+  document.getElementById('cancelOrderEditorBtn').addEventListener('click', cancelOrderEditing);
+  document.getElementById('cancelOrderBtn2').addEventListener('click', cancelOrderEditing);
+
+  // Payments & QR
+  document.getElementById('toggleGpayQrBtn').addEventListener('click', () => {
+    document.getElementById('shopGpayQrDisplay').classList.toggle('hidden');
+  });
+  document.getElementById('paymentOrderSelect').addEventListener('change', e => {
+    selectPaymentOrder(e.target.value);
+  });
+  document.getElementById('recordPaymentForm').addEventListener('submit', handleRecordPayment);
+
+  // Recent Shop Orders
+  document.getElementById('refreshRecentShopOrdersBtn').addEventListener('click', loadRecentShopOrders);
+
+  // Auto-session check on page load
+  (async () => {
+    try {
+      const me = await API.get('/api/auth/me');
+      if (['TAILOR', 'ADMIN'].includes(me.role)) {
+        document.getElementById('whoami').textContent = `${me.username} · ${me.role}`;
+        document.getElementById('loginPanel').classList.add('hidden');
+        document.getElementById('workspace').classList.remove('hidden');
+        document.getElementById('logout').classList.remove('hidden');
+        await loadInitialWorkspace();
+      }
+    } catch (_) {
+      /* Anonymous visitor */
+    }
+  })();
+});

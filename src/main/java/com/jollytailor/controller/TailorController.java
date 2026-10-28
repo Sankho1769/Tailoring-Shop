@@ -99,6 +99,30 @@ public class TailorController {
         return getCustomer(id);
     }
 
+    @GetMapping("/customers/by-phone")
+    public Map<String,Object> customerByPhone(@RequestParam String phone) {
+        String cleanPhone = phone.replaceAll("[^0-9+]", "");
+        var rows = jdbc.queryForList(
+                "SELECT id, name, phone, address, notes, created_at, updated_at FROM customers WHERE phone=? OR phone=? LIMIT 1",
+                cleanPhone, phone.trim());
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found with this phone number");
+        }
+        return rows.get(0);
+    }
+
+    @GetMapping("/customers/{id}/orders")
+    public List<Map<String,Object>> customerOrders(@PathVariable UUID id) {
+        if (!customerExists(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found");
+        }
+        return jdbc.queryForList(
+                "SELECT o.id, o.order_number, o.customer_id, o.measurement_id, o.status, " +
+                "COALESCE(o.payment_status, CASE WHEN o.total > 0 AND o.amount_paid >= o.total THEN 'PAID' WHEN o.amount_paid > 0 THEN 'PARTIALLY_PAID' ELSE 'PAYMENT_DUE' END) AS payment_status, " +
+                "o.due_date, o.notes, o.subtotal, o.discount, o.total, o.amount_paid, (o.total - o.amount_paid) AS due, o.created_at " +
+                "FROM tailoring_orders o WHERE o.customer_id=? ORDER BY o.created_at DESC", id);
+    }
+
     private Map<String,Object> getCustomer(UUID id) {
         try {
             return jdbc.queryForMap("SELECT id, name, phone, address, notes, created_at, updated_at FROM customers WHERE id=?", id);
@@ -366,6 +390,68 @@ public class TailorController {
             jdbc.update("INSERT INTO payments(id, order_id, amount, method, reference, note, payment_type, received_by) " +
                         "VALUES(?,?,?,?,?,?,?,?)",
                     UUID.randomUUID(), id, advance, method, blank(text(b, "advanceRef")), "Advance on order creation", "PAYMENT", uid);
+        }
+
+        return order(id);
+    }
+
+    @PatchMapping("/orders/{id}")
+    @Transactional
+    public Map<String,Object> updateOrder(@PathVariable UUID id, @RequestBody Map<String,Object> b, Authentication auth) {
+        Map<String,Object> existing;
+        try {
+            existing = jdbc.queryForMap("SELECT id, customer_id, measurement_id, due_date, notes, status, total, amount_paid FROM tailoring_orders WHERE id=? FOR UPDATE", id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found");
+        }
+
+        UUID customerId = (UUID) existing.get("customer_id");
+
+        if (b.containsKey("notes")) {
+            jdbc.update("UPDATE tailoring_orders SET notes=?, updated_at=NOW() WHERE id=?", blank(text(b, "notes")), id);
+        }
+
+        if (b.containsKey("dueDate")) {
+            jdbc.update("UPDATE tailoring_orders SET due_date=?, updated_at=NOW() WHERE id=?", dateOrNull(b.get("dueDate")), id);
+        }
+
+        if (b.containsKey("measurementId")) {
+            UUID mid = b.get("measurementId") == null || b.get("measurementId").toString().isBlank()
+                    ? null : uuid(b.get("measurementId"), "measurementId");
+            if (mid != null) {
+                Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM measurements WHERE id=? AND customer_id=?", Integer.class, mid, customerId);
+                if (count == null || count == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selected measurement profile does not belong to this customer");
+                }
+            }
+            jdbc.update("UPDATE tailoring_orders SET measurement_id=?, updated_at=NOW() WHERE id=?", mid, id);
+        }
+
+        if (b.containsKey("status") && b.get("status") != null && !b.get("status").toString().isBlank()) {
+            String raw = text(b, "status").toUpperCase().replace(" ", "_");
+            String canonical = switch (raw) {
+                case "NEW", "RECEIVED" -> "NEW";
+                case "IN_PROGRESS", "CUTTING", "STITCHING" -> "IN_PROGRESS";
+                case "TRIAL" -> "TRIAL";
+                case "READY" -> "READY";
+                case "DELIVERED" -> "DELIVERED";
+                case "CANCELLED" -> "CANCELLED";
+                default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid order status");
+            };
+            String oldStatus = String.valueOf(existing.get("status"));
+            jdbc.update("UPDATE tailoring_orders SET status=?, updated_at=NOW() WHERE id=?", canonical, id);
+
+            if ("CANCELLED".equals(canonical) && !"CANCELLED".equals(oldStatus)) {
+                List<Map<String,Object>> items = jdbc.queryForList(
+                        "SELECT product_id, quantity FROM order_items WHERE order_id=?", id);
+                for (Map<String,Object> it : items) {
+                    Object pId = it.get("product_id");
+                    if (pId != null) {
+                        int q = ((Number) it.get("quantity")).intValue();
+                        jdbc.update("UPDATE products SET stock_quantity = stock_quantity + ?, updated_at=NOW() WHERE id=? AND product_type='READY_MADE'", q, pId);
+                    }
+                }
+            }
         }
 
         return order(id);

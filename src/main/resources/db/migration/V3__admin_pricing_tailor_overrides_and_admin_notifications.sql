@@ -18,5 +18,9 @@ ALTER TABLE products
 
 -- Add admin notification phone to shop_settings
 INSERT INTO shop_settings(setting_key, setting_value)
-VALUES ('admin_notification_phone', '')
+VALUES ('admin_notification_phone', '919748546778')
 ON CONFLICT (setting_key) DO NOTHING;
+
+-- Add email column to customer_requests
+ALTER TABLE customer_requests
+  ADD COLUMN IF NOT EXISTS email VARCHAR(160);

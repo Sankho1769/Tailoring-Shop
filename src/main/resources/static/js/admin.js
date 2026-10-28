@@ -13,12 +13,15 @@ const av = id => {
 
 async function login(e) {
   e.preventDefault();
+  const username = av('username');
+  const password = document.getElementById('password') ? document.getElementById('password').value : '';
   try {
     await API.csrf();
-    const me = await API.post('/api/auth/login', { username: av('username'), password: av('password') });
+    const me = await API.post('/api/auth/login', { username, password });
     if (me.role !== 'ADMIN') {
       throw new Error('Admin role is required to access the Admin Console.');
     }
+    if (document.getElementById('password')) document.getElementById('password').value = '';
     await showAdmin(me);
   } catch (err) {
     setNotice('#loginNotice', err.message);
@@ -332,18 +335,19 @@ async function loadRequests() {
     <tr>
       <td><strong>${escapeHTML(r.name)}</strong></td>
       <td><a href="https://wa.me/${whatsappDigits(r.phone)}" target="_blank" rel="noopener">${escapeHTML(r.phone)}</a></td>
+      <td>${r.email ? `<a href="mailto:${escapeHTML(r.email)}">${escapeHTML(r.email)}</a>` : '—'}</td>
       <td>${escapeHTML(r.requested_service || '—')}</td>
       <td style="max-width:240px;white-space:normal">${escapeHTML(r.message || '—')}</td>
       <td>${new Date(r.created_at).toLocaleDateString()}</td>
       <td>
         <select data-request-status="${r.id}">
-          ${['NEW', 'CONTACTED', 'CONFIRMED', 'CLOSED'].map(s => `
+          ${['NEW', 'CONTACTED', 'CONFIRMED', 'RESOLVED', 'CLOSED'].map(s => `
             <option value="${s}" ${s === r.status ? 'selected' : ''}>${s}</option>
           `).join('')}
         </select>
       </td>
     </tr>
-  `).join('') : '<tr><td colspan="6">No consumer website enquiries received yet.</td></tr>';
+  `).join('') : '<tr><td colspan="7">No consumer website enquiries received yet.</td></tr>';
 
   document.querySelectorAll('[data-request-status]').forEach(s => {
     s.onchange = async () => {

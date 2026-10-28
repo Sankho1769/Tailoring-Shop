@@ -150,4 +150,123 @@ class AdminAndPublicIntegrationTest {
                 .andExpect(jsonPath("$.admin_notification_phone", is("919830099999")))
                 .andExpect(jsonPath("$.upi_id", is("jollytailor@okaxis")));
     }
+
+    @Test
+    @DisplayName("Public contact enquiry: validation, rate limiting, and persistence")
+    void testPublicContactEnquiry() throws Exception {
+        // 1. Missing required name
+        mockMvc.perform(post("/api/public/contact")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "",
+                                "phone", "9748546778",
+                                "message", "Test message"
+                        ))))
+                .andExpect(status().isBadRequest());
+
+        // 2. Missing required phone
+        mockMvc.perform(post("/api/public/contact")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Priya",
+                                "phone", "",
+                                "message", "Test message"
+                        ))))
+                .andExpect(status().isBadRequest());
+
+        // 3. Invalid Indian mobile number
+        mockMvc.perform(post("/api/public/contact")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Priya",
+                                "phone", "12345",
+                                "message", "Test message"
+                        ))))
+                .andExpect(status().isBadRequest());
+
+        // 4. Invalid email format
+        mockMvc.perform(post("/api/public/contact")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Priya",
+                                "phone", "9748546778",
+                                "email", "not-a-valid-email",
+                                "message", "Test message"
+                        ))))
+                .andExpect(status().isBadRequest());
+
+        // 5. Missing required message
+        mockMvc.perform(post("/api/public/contact")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Priya",
+                                "phone", "9748546778",
+                                "message", ""
+                        ))))
+                .andExpect(status().isBadRequest());
+
+        // 6. Valid contact enquiry submission (unauthenticated)
+        mockMvc.perform(post("/api/public/contact")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Priya Sharma",
+                                "phone", "+91 9748546778",
+                                "email", "priya@example.com",
+                                "service", "Blouse Stitching",
+                                "message", "Need a padded blouse for an upcoming wedding."
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status", is("SUCCESS")))
+                .andExpect(jsonPath("$.id").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("Admin view and status updates for customer enquiries, with role access boundaries")
+    @WithMockUser(username = "admin_user", roles = {"ADMIN"})
+    void testAdminEnquiriesManagement() throws Exception {
+        // Submit an enquiry first
+        String submitRes = mockMvc.perform(post("/api/public/contact")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Ananya Das",
+                                "phone", "9748546778",
+                                "email", "ananya@example.com",
+                                "service", "Alterations",
+                                "message", "Need salwar suit altered by Saturday."
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String enquiryId = (String) mapper.readValue(submitRes, Map.class).get("id");
+
+        // Admin can view enquiries
+        mockMvc.perform(get("/api/admin/requests"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[?(@.name == 'Ananya Das')].email").value(hasItem("ananya@example.com")))
+                .andExpect(jsonPath("$[?(@.name == 'Ananya Das')].status").value(hasItem("NEW")));
+
+        // Admin can update status to RESOLVED
+        mockMvc.perform(patch("/api/admin/requests/" + enquiryId + "/status")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("status", "RESOLVED"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("RESOLVED")));
+    }
+
+    @Test
+    @DisplayName("Non-admin role boundaries for customer enquiries")
+    void testEnquiriesAccessBoundaries() throws Exception {
+        // Unauthenticated request to /api/admin/requests is unauthorized
+        mockMvc.perform(get("/api/admin/requests"))
+                .andExpect(status().isUnauthorized());
+    }
 }

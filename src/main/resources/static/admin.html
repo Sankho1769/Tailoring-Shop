@@ -9,7 +9,7 @@
 <body>
 <header class="topbar">
   <a class="brand" href="/">
-    <div class="brand-mark">🧵</div>
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Logo" class="brand-logo">
     <div>
       <h1>Admin Console</h1>
       <small>JOLLY LADIES TAILOR</small>
@@ -24,11 +24,12 @@
 
 <main>
   <!-- Login Panel -->
-  <section id="loginPanel" class="panel login-wrap">
+  <section id="loginPanel" class="panel login-wrap" style="text-align:center">
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Sewing Machine Logo" class="brand-logo-lg">
     <div class="eyebrow">Owner access</div>
     <h2>Admin login</h2>
     <p class="muted">Manage business analytics, staff, services, customers, payments, and shop settings.</p>
-    <form id="loginForm">
+    <form id="loginForm" style="text-align:left">
       <div class="field">
         <label for="username">Admin Username</label>
         <input id="username" required autocomplete="username">
@@ -425,6 +426,7 @@
             <tr>
               <th>Customer Name</th>
               <th>Phone</th>
+              <th>Email</th>
               <th>Requested Service</th>
               <th>Message</th>
               <th>Received Date</th>
@@ -432,7 +434,7 @@
             </tr>
           </thead>
           <tbody id="requestsRows">
-            <tr><td colspan="6">Loading enquiries...</td></tr>
+            <tr><td colspan="7">Loading enquiries...</td></tr>
           </tbody>
         </table>
       </div>

@@ -92,6 +92,9 @@ class SecurityAndRoleBoundaryTest {
 
         mockMvc.perform(get("/api/admin/shop-settings"))
                 .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/admin/requests"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
