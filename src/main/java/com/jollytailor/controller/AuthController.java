@@ -3,7 +3,10 @@ package com.jollytailor.controller;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import java.util.Deque;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -12,6 +15,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -21,10 +25,36 @@ import org.springframework.web.server.ResponseStatusException;
 public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository;
+    private final JdbcTemplate jdbc;
+    private final ConcurrentHashMap<String, Deque<Long>> loginAttemptTimestamps = new ConcurrentHashMap<>();
 
-    public AuthController(AuthenticationManager authenticationManager, SecurityContextRepository securityContextRepository) {
+    public AuthController(AuthenticationManager authenticationManager, SecurityContextRepository securityContextRepository, JdbcTemplate jdbc) {
         this.authenticationManager = authenticationManager;
         this.securityContextRepository = securityContextRepository;
+        this.jdbc = jdbc;
+    }
+
+    private void checkLoginRateLimit(HttpServletRequest request) {
+        if (request == null) return;
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isBlank()) {
+            ip = request.getRemoteAddr();
+        } else if (ip.contains(",")) {
+            ip = ip.split(",")[0].trim();
+        }
+        if (ip == null || ip.isBlank()) ip = "unknown";
+
+        long now = System.currentTimeMillis();
+        Deque<Long> queue = loginAttemptTimestamps.computeIfAbsent(ip, k -> new ConcurrentLinkedDeque<>());
+        synchronized (queue) {
+            while (!queue.isEmpty() && now - queue.peekFirst() > 60000L) {
+                queue.pollFirst();
+            }
+            if (queue.size() >= 10) {
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many login attempts. Please wait a minute before trying again.");
+            }
+            queue.addLast(now);
+        }
     }
 
     @GetMapping("/csrf")
@@ -36,6 +66,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public Map<String,Object> login(@RequestBody(required = false) Map<String,String> body, HttpServletRequest request, HttpServletResponse response) {
+        checkLoginRateLimit(request);
         String username = body != null ? body.getOrDefault("username", "").trim() : "";
         String password = body != null ? body.getOrDefault("password", "") : "";
         if (username.isBlank() || password.isBlank()) {
@@ -52,8 +83,18 @@ public class AuthController {
             SecurityContextHolder.setContext(context);
             securityContextRepository.saveContext(context, request, response);
 
+            try {
+                jdbc.update("UPDATE app_users SET last_login_at=NOW() WHERE username=?", auth.getName());
+            } catch (Exception ignored) {}
+
             String role = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")) ? "ADMIN" : "TAILOR";
-            return Map.of("username", auth.getName(), "role", role);
+            String fullName = auth.getName();
+            try {
+                String fn = jdbc.queryForObject("SELECT full_name FROM app_users WHERE username=?", String.class, auth.getName());
+                if (fn != null && !fn.isBlank()) fullName = fn;
+            } catch (Exception ignored) {}
+
+            return Map.of("username", auth.getName(), "role", role, "fullName", fullName);
         } catch (DisabledException ex) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is inactive. Please contact the administrator.");
         } catch (org.springframework.security.core.AuthenticationException ex) {
@@ -67,7 +108,12 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         String role = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")) ? "ADMIN" : "TAILOR";
-        return Map.of("username", auth.getName(), "role", role);
+        String fullName = auth.getName();
+        try {
+            String fn = jdbc.queryForObject("SELECT full_name FROM app_users WHERE username=?", String.class, auth.getName());
+            if (fn != null && !fn.isBlank()) fullName = fn;
+        } catch (Exception ignored) {}
+        return Map.of("username", auth.getName(), "role", role, "fullName", fullName);
     }
 
     @PostMapping("/logout")

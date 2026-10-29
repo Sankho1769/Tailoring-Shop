@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /index.html
+Allow: /css/
+Allow: /js/
+Allow: /images/
+
+# Disallow private staff operations and internal data
+Disallow: /admin.html
+Disallow: /tailor.html
+Disallow: /bill.html
+Disallow: /api/
+
+Sitemap: https://jollyladiestailor.com/sitemap.xml

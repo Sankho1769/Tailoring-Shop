@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Customer e-Bill | Jolly Ladies Tailor</title>
+  <link rel="icon" type="image/png" href="/images/jolly-ladies-tailor-logo.png">
   <link rel="stylesheet" href="/css/site.css">
   <style>
     body { background: #fdf8fc; padding: 20px 12px; }
@@ -75,9 +76,20 @@
       <div class="totals-box">
         <div class="totals-row"><span>Subtotal:</span><span id="billSubtotal">₹0.00</span></div>
         <div class="totals-row" id="discountRow" hidden><span>Discount:</span><span id="billDiscount">- ₹0.00</span></div>
-        <div class="totals-row grand"><span>Total Amount:</span><span id="billTotal">₹0.00</span></div>
+        <div class="totals-row grand"><span>Total for this Bill:</span><span id="billTotal">₹0.00</span></div>
         <div class="totals-row"><span>Amount Paid:</span><span id="billPaid" style="color:#18643d">₹0.00</span></div>
-        <div class="totals-row due"><span>Balance Due:</span><span id="billDue">₹0.00</span></div>
+        <div class="totals-row due"><span>Balance Due (this Bill):</span><span id="billDue">₹0.00</span></div>
+
+        <!-- Customer Account Reconciliation (Separated Previous Open Debt) -->
+        <div id="accountStatementBox" class="hidden" style="margin-top:14px;padding:12px;background:#fef8fc;border:1px dashed #e7b0de;border-radius:10px;font-size:13px">
+          <div style="font-weight:700;color:var(--violet);margin-bottom:6px">Customer Account Statement</div>
+          <div class="totals-row"><span>This Bill Due:</span><span id="thisBillDue">₹0.00</span></div>
+          <div class="totals-row"><span>Previous Orders Balance:</span><span id="billPrevDue" style="color:var(--orange)">₹0.00</span></div>
+          <div class="totals-row" style="font-weight:700;color:#b30000;border-top:1px solid #ebd3e8;padding-top:4px;margin-top:4px">
+            <span>Total Outstanding:</span><span id="billOverallDue">₹0.00</span>
+          </div>
+          <p class="muted" style="margin:4px 0 0;font-size:11px">* Previous balance is shown for customer account statement purposes and is not added to this order's total.</p>
+        </div>
       </div>
 
       <div id="paymentsSection" class="hidden" style="margin-top:24px">
@@ -101,7 +113,8 @@
       </div>
 
       <div class="bill-actions no-print">
-        <button class="btn" onclick="window.print()">🖨️ Print / Save PDF</button>
+        <a id="downloadPdfBtn" class="btn" href="#" download>📄 Download Official PDF</a>
+        <button class="btn" onclick="window.print()">🖨️ Print Invoice</button>
         <a id="shopWaBtn" class="btn orange" href="#" target="_blank" rel="noopener">💬 Chat with Shop on WhatsApp</a>
         <a class="btn light" href="/">← Return to Shop Website</a>
       </div>
@@ -189,6 +202,21 @@
     document.getElementById('billPaid').textContent = money(bill.amount_paid);
     document.getElementById('billDue').textContent = money(bill.due);
 
+    // Account statement reconciliation
+    const prevDue = Number(bill.previous_orders_due || 0);
+    const overallDue = Number(bill.overall_customer_due || bill.due || 0);
+    const acctBox = document.getElementById('accountStatementBox');
+    if (acctBox) {
+      if (prevDue > 0) {
+        acctBox.classList.remove('hidden');
+        document.getElementById('thisBillDue').textContent = money(bill.due);
+        document.getElementById('billPrevDue').textContent = money(prevDue);
+        document.getElementById('billOverallDue').textContent = money(overallDue);
+      } else {
+        acctBox.classList.add('hidden');
+      }
+    }
+
     // Payments
     const payments = bill.payments || [];
     if (payments.length > 0) {
@@ -203,6 +231,13 @@
           </td>
         </tr>
       `).join('');
+    }
+
+    const pdfUrl = `/api/public/bills/${encodeURIComponent(id)}/pdf` + (phone ? '?phone=' + encodeURIComponent(phone) : '');
+    const pdfBtn = document.getElementById('downloadPdfBtn');
+    if (pdfBtn) {
+      pdfBtn.href = pdfUrl;
+      pdfBtn.download = `invoice-${bill.order_number || 'bill'}.pdf`;
     }
 
   } catch (err) {

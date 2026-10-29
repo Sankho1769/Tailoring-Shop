@@ -15,6 +15,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 
@@ -59,10 +60,17 @@ public class SecurityConfig {
                 .csrfTokenRepository(csrfRepo)
                 .csrfTokenRequestHandler(requestHandler)
             )
+            .headers(headers -> {
+                headers.contentTypeOptions(ct -> {});
+                headers.frameOptions(f -> f.deny());
+                headers.referrerPolicy(r -> r.policy(ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN));
+                headers.permissionsPolicy(p -> p.policy("camera=(), microphone=(), geolocation=()"));
+                headers.contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'"));
+            })
             .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
             .exceptionHandling(e -> e.authenticationEntryPoint(new org.springframework.security.web.authentication.HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/index.html", "/tailor.html", "/admin.html", "/bill.html", "/css/**", "/js/**", "/images/**", "/favicon.ico", "/error", "/api/auth/csrf", "/api/auth/login", "/api/public/**").permitAll()
+                .requestMatchers("/", "/index.html", "/tailor.html", "/admin.html", "/bill.html", "/404.html", "/robots.txt", "/sitemap.xml", "/css/**", "/js/**", "/images/**", "/favicon.ico", "/error", "/error/**", "/api/auth/csrf", "/api/auth/login", "/api/public/**").permitAll()
                 .requestMatchers("/api/admin/**", "/api/media/**").hasRole("ADMIN")
                 .requestMatchers("/api/tailor/**").hasAnyRole("ADMIN", "TAILOR")
                 .anyRequest().authenticated())

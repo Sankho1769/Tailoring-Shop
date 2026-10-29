@@ -1,6 +1,9 @@
 package com.jollytailor.controller;
 
+import com.jollytailor.service.ExcelExportService;
+import com.jollytailor.service.InvoicePdfService;
 import com.jollytailor.service.StorageService;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
@@ -27,11 +30,16 @@ public class AdminController {
     private final JdbcTemplate jdbc;
     private final StorageService storage;
     private final PasswordEncoder encoder;
+    private final InvoicePdfService pdfService;
+    private final ExcelExportService excelService;
 
-    public AdminController(JdbcTemplate jdbc, StorageService storage, PasswordEncoder encoder) {
+    public AdminController(JdbcTemplate jdbc, StorageService storage, PasswordEncoder encoder,
+                           InvoicePdfService pdfService, ExcelExportService excelService) {
         this.jdbc = jdbc;
         this.storage = storage;
         this.encoder = encoder;
+        this.pdfService = pdfService;
+        this.excelService = excelService;
     }
 
     @GetMapping("/stats")
@@ -193,7 +201,15 @@ public class AdminController {
                 ps.setString(2, blank(text(b, "description")));
                 return ps;
             }, keyHolder);
-            Long id = extractKey(keyHolder);
+            Long id;
+            try {
+                id = extractKey(keyHolder);
+                if (id == null || id == 1L) {
+                    id = jdbc.queryForObject("SELECT id FROM categories WHERE name=?", Long.class, name);
+                }
+            } catch (Exception ex) {
+                id = jdbc.queryForObject("SELECT id FROM categories WHERE name=?", Long.class, name);
+            }
             return Map.of("id", id, "name", name);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Category already exists");
@@ -202,6 +218,12 @@ public class AdminController {
 
     @DeleteMapping("/categories/{id}")
     public Map<String,String> deleteCategory(@PathVariable long id) {
+        Integer activeProductCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM products WHERE category_id = ? AND active = true", Integer.class, id);
+        if (activeProductCount != null && activeProductCount > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot deactivate category while " + activeProductCount + " active product(s) reference it. Please reassign products first.");
+        }
         jdbc.update("UPDATE categories SET active=false WHERE id=?", id);
         return Map.of("message", "Category deactivated");
     }
@@ -329,52 +351,173 @@ public class AdminController {
         return out;
     }
 
-    @GetMapping("/users")
-    public List<Map<String,Object>> users() {
-        return jdbc.queryForList("SELECT id, username, role, active, created_at FROM app_users ORDER BY id");
+    @GetMapping("/orders/{id}/measurement")
+    public Map<String,Object> getOrderMeasurement(@PathVariable UUID id) {
+        Map<String,Object> orderRow;
+        try {
+            orderRow = jdbc.queryForMap(
+                "SELECT o.order_number, o.measurement_id, c.name AS customer_name " +
+                "FROM tailoring_orders o JOIN customers c ON c.id=o.customer_id WHERE o.id=?", id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found");
+        }
+
+        Object measurementId = orderRow.get("measurement_id");
+        if (measurementId == null) {
+            return Map.of(
+                "hasMeasurement", false,
+                "orderNumber", orderRow.get("order_number"),
+                "customerName", orderRow.get("customer_name"),
+                "message", "No measurement snapshot was attached to this order."
+            );
+        }
+
+        try {
+            Map<String,Object> mRow = jdbc.queryForMap(
+                "SELECT m.id, m.customer_id, m.garment_type, m.unit, CAST(m.dimensions AS VARCHAR) AS dimensions, " +
+                "m.fit_preference, m.notes, m.created_at, u.username AS recorded_by " +
+                "FROM measurements m LEFT JOIN app_users u ON u.id = m.created_by WHERE m.id=?", measurementId);
+            Map<String,Object> out = new HashMap<>();
+            out.put("hasMeasurement", true);
+            out.put("orderNumber", orderRow.get("order_number"));
+            out.put("customerName", orderRow.get("customer_name"));
+            out.put("measurement", mRow);
+            return out;
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            return Map.of(
+                "hasMeasurement", false,
+                "orderNumber", orderRow.get("order_number"),
+                "customerName", orderRow.get("customer_name"),
+                "message", "The measurement snapshot referenced by this order is no longer available."
+            );
+        }
     }
 
-    @PostMapping("/users")
+    @GetMapping({"/users", "/staff"})
+    public List<Map<String,Object>> staffList() {
+        return jdbc.queryForList("SELECT id, username, full_name, role, active, created_at, last_login_at FROM app_users ORDER BY id");
+    }
+
+    @PostMapping({"/users", "/staff"})
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String,Object> createUser(@RequestBody Map<String,Object> b) {
+    public Map<String,Object> createStaff(@RequestBody Map<String,Object> b) {
         String username = text(b, "username");
         String password = text(b, "password");
         String role = text(b, "role").toUpperCase();
+        String fullName = text(b, "fullName");
+        if (fullName.isBlank()) {
+            fullName = text(b, "full_name");
+        }
         if (username.isBlank() || password.length() < 12 || !Set.of("ADMIN", "TAILOR").contains(role)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Provide username, password of at least 12 characters, and ADMIN or TAILOR role");
         }
+        boolean active = true;
+        if (b.containsKey("active")) {
+            active = Boolean.parseBoolean(String.valueOf(b.get("active")));
+        }
+        final String finalFullName = fullName.isBlank() ? username : fullName;
+        final boolean finalActive = active;
         try {
             KeyHolder keyHolder = new GeneratedKeyHolder();
             jdbc.update(connection -> {
                 PreparedStatement ps = connection.prepareStatement(
-                        "INSERT INTO app_users(username, password_hash, role) VALUES(?,?,?)", new String[]{"id"});
+                        "INSERT INTO app_users(username, full_name, password_hash, role, active) VALUES(?,?,?,?,?)", new String[]{"id"});
                 ps.setString(1, username);
-                ps.setString(2, encoder.encode(password));
-                ps.setString(3, role);
+                ps.setString(2, finalFullName);
+                ps.setString(3, encoder.encode(password));
+                ps.setString(4, role);
+                ps.setBoolean(5, finalActive);
                 return ps;
             }, keyHolder);
-            Long id = extractKey(keyHolder);
-            return Map.of("id", id, "username", username, "role", role);
+            Long id;
+            try {
+                id = extractKey(keyHolder);
+                if (id == null || id == 1L) {
+                    id = jdbc.queryForObject("SELECT id FROM app_users WHERE username=?", Long.class, username);
+                }
+            } catch (Exception ex) {
+                id = jdbc.queryForObject("SELECT id FROM app_users WHERE username=?", Long.class, username);
+            }
+            Map<String,Object> out = new LinkedHashMap<>();
+            out.put("id", id);
+            out.put("username", username);
+            out.put("fullName", finalFullName);
+            out.put("role", role);
+            out.put("active", finalActive);
+            return out;
         } catch (org.springframework.dao.DuplicateKeyException ex) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
         }
     }
 
-    @PatchMapping("/users/{id}/active")
-    public Map<String,String> activeUser(@PathVariable long id, @RequestBody Map<String,Object> b) {
-        jdbc.update("UPDATE app_users SET active=? WHERE id=?", Boolean.parseBoolean(String.valueOf(b.get("active"))), id);
-        return Map.of("message", "User status updated");
+    @PatchMapping({"/staff/{id}", "/users/{id}"})
+    public Map<String,Object> updateStaff(@PathVariable long id, @RequestBody Map<String,Object> b) {
+        Map<String,Object> existing;
+        try {
+            existing = jdbc.queryForMap("SELECT id, username, full_name, role, active FROM app_users WHERE id=?", id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff member not found");
+        }
+
+        String currentRole = String.valueOf(existing.get("role"));
+        boolean currentActive = Boolean.TRUE.equals(existing.get("active"));
+
+        // Last Active Administrator Protection: Never demote or deactivate the last active admin
+        if (b.containsKey("active") && !Boolean.parseBoolean(String.valueOf(b.get("active")))) {
+            if ("ADMIN".equals(currentRole) && currentActive) {
+                Integer remainingAdmins = jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM app_users WHERE role='ADMIN' AND active=true AND id<>?", Integer.class, id);
+                if (remainingAdmins == null || remainingAdmins == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot deactivate or demote the last active administrator account.");
+                }
+            }
+        }
+
+        if (b.containsKey("role")) {
+            String newRole = text(b, "role").toUpperCase();
+            if (!Set.of("ADMIN", "TAILOR").contains(newRole)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role must be ADMIN or TAILOR");
+            }
+            if ("ADMIN".equals(currentRole) && !"ADMIN".equals(newRole) && currentActive) {
+                Integer remainingAdmins = jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM app_users WHERE role='ADMIN' AND active=true AND id<>?", Integer.class, id);
+                if (remainingAdmins == null || remainingAdmins == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot deactivate or demote the last active administrator account.");
+                }
+            }
+            jdbc.update("UPDATE app_users SET role=? WHERE id=?", newRole, id);
+        }
+
+        if (b.containsKey("active")) {
+            boolean act = Boolean.parseBoolean(String.valueOf(b.get("active")));
+            jdbc.update("UPDATE app_users SET active=? WHERE id=?", act, id);
+        }
+
+        if (b.containsKey("fullName") || b.containsKey("full_name")) {
+            String fn = b.containsKey("fullName") ? text(b, "fullName") : text(b, "full_name");
+            if (!fn.isBlank()) {
+                jdbc.update("UPDATE app_users SET full_name=? WHERE id=?", fn, id);
+            }
+        }
+
+        return Map.of("id", id, "message", "Staff account updated successfully");
     }
 
-    @PatchMapping("/users/{id}/password")
-    public Map<String,String> resetUserPassword(@PathVariable long id, @RequestBody Map<String,Object> b) {
-        String password = text(b, "password");
-        if (password.length() < 12) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password must be at least 12 characters");
+    @PatchMapping("/users/{id}/active")
+    public Map<String,String> activeUser(@PathVariable long id, @RequestBody Map<String,Object> b) {
+        boolean act = Boolean.parseBoolean(String.valueOf(b.get("active")));
+        if (!act) {
+            String role = jdbc.queryForObject("SELECT role FROM app_users WHERE id=? AND active=true", String.class, id);
+            if ("ADMIN".equals(role)) {
+                Integer remainingAdmins = jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM app_users WHERE role='ADMIN' AND active=true AND id<>?", Integer.class, id);
+                if (remainingAdmins == null || remainingAdmins == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot deactivate or demote the last active administrator account.");
+                }
+            }
         }
-        int n = jdbc.update("UPDATE app_users SET password_hash=? WHERE id=?", encoder.encode(password), id);
-        if (n == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
-        return Map.of("message", "Password reset successfully");
+        jdbc.update("UPDATE app_users SET active=? WHERE id=?", act, id);
+        return Map.of("message", "User status updated");
     }
 
     @PatchMapping("/users/{id}/role")
@@ -383,9 +526,35 @@ public class AdminController {
         if (!Set.of("ADMIN", "TAILOR").contains(role)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role must be ADMIN or TAILOR");
         }
+        if (!"ADMIN".equals(role)) {
+            Boolean isActive = jdbc.queryForObject("SELECT active FROM app_users WHERE id=? AND role='ADMIN'", Boolean.class, id);
+            if (Boolean.TRUE.equals(isActive)) {
+                Integer remainingAdmins = jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM app_users WHERE role='ADMIN' AND active=true AND id<>?", Integer.class, id);
+                if (remainingAdmins == null || remainingAdmins == 0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot deactivate or demote the last active administrator account.");
+                }
+            }
+        }
         int n = jdbc.update("UPDATE app_users SET role=? WHERE id=?", role, id);
         if (n == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
         return Map.of("message", "Role updated to " + role);
+    }
+
+    @PostMapping({"/staff/{id}/reset-password", "/users/{id}/reset-password"})
+    public Map<String,String> resetStaffPassword(@PathVariable long id, @RequestBody Map<String,Object> b) {
+        String password = text(b, "password");
+        if (password.length() < 12) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "New password must be at least 12 characters");
+        }
+        int n = jdbc.update("UPDATE app_users SET password_hash=? WHERE id=?", encoder.encode(password), id);
+        if (n == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff member not found");
+        return Map.of("message", "Password reset successfully");
+    }
+
+    @PatchMapping("/users/{id}/password")
+    public Map<String,String> resetUserPassword(@PathVariable long id, @RequestBody Map<String,Object> b) {
+        return resetStaffPassword(id, b);
     }
 
     // CSV Reports
@@ -474,6 +643,26 @@ public class AdminController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"customers-" + LocalDate.now() + ".csv\"")
                 .contentType(MediaType.parseMediaType("text/csv"))
                 .body(bytes);
+    }
+
+    @GetMapping(value = "/orders/{id}/pdf", produces = "application/pdf")
+    public ResponseEntity<byte[]> downloadInvoicePdf(@PathVariable UUID id) {
+        byte[] pdf = pdfService.generateInvoicePdf(id);
+        String orderNum = jdbc.queryForObject("SELECT order_number FROM tailoring_orders WHERE id=?", String.class, id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoice-" + orderNum + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
+    }
+
+    @GetMapping(value = "/reports/export-excel", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    public ResponseEntity<byte[]> exportOverallExcel() throws IOException {
+        byte[] excel = excelService.generateWorkbook();
+        String filename = "jolly-ladies-tailor-data-" + LocalDate.now() + ".xlsx";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excel);
     }
 
     private String escapeCsv(Object o) {

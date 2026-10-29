@@ -276,6 +276,19 @@ public class TailorController {
                 out.put("measurement", mRow);
             } catch (Exception ignored) {}
         }
+
+        UUID customerId = (UUID) out.get("customer_id");
+        BigDecimal currentDue = out.get("due") != null ? (BigDecimal) out.get("due") : BigDecimal.ZERO;
+        if (currentDue.signum() < 0) currentDue = BigDecimal.ZERO;
+
+        BigDecimal prevDue = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(GREATEST(total - amount_paid, 0)), 0) FROM tailoring_orders WHERE customer_id=? AND id<>? AND status<>'CANCELLED'",
+                BigDecimal.class, customerId, id);
+        if (prevDue == null || prevDue.signum() < 0) prevDue = BigDecimal.ZERO;
+
+        out.put("previous_orders_due", prevDue);
+        out.put("overall_customer_due", currentDue.add(prevDue));
+
         return out;
     }
 

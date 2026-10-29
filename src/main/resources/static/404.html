@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>404 - Page Not Found | Jolly Ladies Tailor</title>
+  <meta name="description" content="The page you are looking for does not exist on Jolly Ladies Tailor. Return to our homepage to explore bespoke ladies tailoring and alteration services in Kolkata.">
+  <link rel="icon" type="image/png" href="/images/jolly-ladies-tailor-logo.png">
+  <link rel="stylesheet" href="/css/site.css">
+  <style>
+    .error-container {
+      max-width: 620px;
+      margin: 60px auto;
+      text-align: center;
+      padding: 36px 24px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+    .error-code {
+      font-size: clamp(64px, 12vw, 100px);
+      font-weight: 800;
+      color: var(--violet);
+      font-family: Georgia, serif;
+      line-height: 1;
+      margin: 12px 0;
+    }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="/">
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Sewing Machine Logo" class="brand-logo" width="48" height="48">
+    <div>
+      <h1>Jolly Ladies Tailor</h1>
+      <small>MADE TO FIT YOU</small>
+    </div>
+  </a>
+  <nav class="navlinks">
+    <a href="/">← Return to Homepage</a>
+  </nav>
+</header>
+
+<main>
+  <div class="error-container">
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Logo" class="brand-logo-lg" width="120" height="120" style="margin:0 auto 16px">
+    <div class="eyebrow" style="color:var(--orange)">Page Unavailable</div>
+    <div class="error-code">404</div>
+    <h2 style="font:700 24px Georgia,serif;color:var(--violet);margin:0 0 12px">Stitch Not Found</h2>
+    <p class="muted" style="font-size:15px;line-height:1.6;margin:0 0 24px">
+      The page or resource you are looking for might have been moved, renamed, or is temporarily unavailable. Let's get you back on track!
+    </p>
+
+    <div class="form-actions" style="justify-content:center;gap:12px">
+      <a class="btn orange" href="/">✨ Explore Homepage</a>
+      <a class="btn light" href="/#services">🧵 Tailoring Services</a>
+      <a class="btn" href="tel:+919748546778">📞 Call Boutique</a>
+    </div>
+
+    <div style="margin-top:28px;padding-top:18px;border-top:1px dashed var(--line);font-size:13px;color:var(--muted)">
+      Looking for customer orders or staff access?<br>
+      <a href="/tailor.html" style="color:var(--violet);font-weight:700;text-decoration:underline">Tailor Workspace</a> ·
+      <a href="/admin.html" style="color:var(--violet);font-weight:700;text-decoration:underline">Admin Console</a>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">
+  <div>© <span id="year"></span> Jolly Ladies Tailor · 12/A Southern Avenue, Kolkata · Phone: 9748546778</div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>

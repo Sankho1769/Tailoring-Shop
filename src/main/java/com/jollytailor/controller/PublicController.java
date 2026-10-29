@@ -1,13 +1,18 @@
 package com.jollytailor.controller;
 
+import com.jollytailor.service.InvoicePdfService;
 import com.jollytailor.service.StorageService;
 import jakarta.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
@@ -15,11 +20,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class PublicController {
     private final JdbcTemplate jdbc;
     private final StorageService storage;
+    private final InvoicePdfService pdfService;
     private final ConcurrentHashMap<String, Deque<Long>> ipRequestTimestamps = new ConcurrentHashMap<>();
 
-    public PublicController(JdbcTemplate jdbc, StorageService storage) {
+    public PublicController(JdbcTemplate jdbc, StorageService storage, InvoicePdfService pdfService) {
         this.jdbc = jdbc;
         this.storage = storage;
+        this.pdfService = pdfService;
     }
 
     private void checkRateLimit(HttpServletRequest request) {
@@ -152,7 +159,7 @@ public class PublicController {
         Map<String,Object> ord;
         try {
             ord = jdbc.queryForMap(
-                    "SELECT o.id, o.order_number, o.status, " +
+                    "SELECT o.id, o.order_number, o.customer_id, o.status, " +
                     "COALESCE(o.payment_status, CASE WHEN o.total > 0 AND o.amount_paid >= o.total THEN 'PAID' WHEN o.amount_paid > 0 THEN 'PARTIALLY_PAID' ELSE 'PAYMENT_DUE' END) AS payment_status, " +
                     "o.due_date, o.subtotal, o.discount, o.total, o.amount_paid, (o.total - o.amount_paid) AS due, o.created_at, " +
                     "c.name AS customer_name, c.phone AS customer_phone " +
@@ -169,6 +176,19 @@ public class PublicController {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Phone number verification failed");
             }
         }
+
+        UUID customerId = (UUID) ord.get("customer_id");
+        BigDecimal currentDue = ord.get("due") != null ? (BigDecimal) ord.get("due") : BigDecimal.ZERO;
+        if (currentDue.signum() < 0) currentDue = BigDecimal.ZERO;
+
+        BigDecimal prevDue = customerId != null ? jdbc.queryForObject(
+                "SELECT COALESCE(SUM(GREATEST(total - amount_paid, 0)), 0) FROM tailoring_orders WHERE customer_id=? AND id<>? AND status<>'CANCELLED'",
+                BigDecimal.class, customerId, id) : BigDecimal.ZERO;
+        if (prevDue == null || prevDue.signum() < 0) prevDue = BigDecimal.ZERO;
+
+        ord.put("previous_orders_due", prevDue);
+        ord.put("overall_customer_due", currentDue.add(prevDue));
+        ord.remove("customer_id");
 
         // Mask phone for privacy in public view
         String rawPhone = String.valueOf(ord.get("customer_phone"));
@@ -200,6 +220,28 @@ public class PublicController {
         ));
 
         return ord;
+    }
+
+    @GetMapping(value = "/bills/{id}/pdf", produces = "application/pdf")
+    public ResponseEntity<byte[]> getPublicBillPdf(@PathVariable UUID id, @RequestParam(required = false) String phone) {
+        if (phone != null && !phone.isBlank()) {
+            var phoneRows = jdbc.queryForList(
+                    "SELECT c.phone FROM tailoring_orders o JOIN customers c ON c.id=o.customer_id WHERE o.id=?", id);
+            if (phoneRows.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill not found");
+            }
+            String cleanParam = phone.replaceAll("[^0-9]", "");
+            String cleanCust = String.valueOf(phoneRows.get(0).get("phone")).replaceAll("[^0-9]", "");
+            if (!cleanCust.endsWith(cleanParam) && !cleanParam.endsWith(cleanCust)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Phone number verification failed");
+            }
+        }
+        byte[] pdf = pdfService.generateInvoicePdf(id);
+        String orderNum = jdbc.queryForObject("SELECT order_number FROM tailoring_orders WHERE id=?", String.class, id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoice-" + orderNum + ".pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 
     private String text(Map<String,Object> b, String k) {

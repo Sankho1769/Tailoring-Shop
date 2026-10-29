@@ -1418,6 +1418,23 @@ function setupFinalizeStage() {
   document.getElementById('finalPaid').textContent = money(o.amount_paid);
   document.getElementById('finalDue').textContent = money(o.due);
 
+  const prevDue = Number(o.previous_orders_due || 0);
+  const overallDue = Number(o.overall_customer_due || o.due || 0);
+  const debtBreakdownEl = document.getElementById('finalCustomerDebtBreakdown');
+  if (debtBreakdownEl) {
+    if (prevDue > 0) {
+      debtBreakdownEl.classList.remove('hidden');
+      const curDueEl = document.getElementById('finalCurrentDue');
+      if (curDueEl) curDueEl.textContent = money(o.due);
+      const prevEl = document.getElementById('finalPrevDue');
+      if (prevEl) prevEl.textContent = money(prevDue);
+      const overallEl = document.getElementById('finalOverallDue');
+      if (overallEl) overallEl.textContent = money(overallDue);
+    } else {
+      debtBreakdownEl.classList.add('hidden');
+    }
+  }
+
   // Setup PDF Download Link
   const pdfBtn = document.getElementById('downloadFinalPdfBtn');
   pdfBtn.href = `/api/tailor/orders/${o.id}/pdf`;
@@ -1434,7 +1451,14 @@ function buildWhatsAppMessage(o) {
 
   const itemsList = (o.items || []).map(it => `• ${it.item_name} (Qty: ${it.quantity}) - ${money(it.amount)}`).join('\n');
 
-  return `Namaste ${o.customer}! 🙏\nYour stitching bill ${o.order_number} from Jolly Ladies Tailor has been generated.\n\nGarments & Services:\n${itemsList}\n\nTotal Amount: ${money(o.total)}\nPaid Amount: ${money(o.amount_paid)}\nBalance Due: ${money(o.due)}\nPromised Delivery: ${dueD}\n\nView and download your digital e-bill anytime:\n${billUrl}\n\nThank you for choosing Jolly Ladies Tailor!\nSouthern Avenue, Kolkata · Phone: 9748546778`;
+  let balanceText = `Balance Due for this Bill: ${money(o.due)}`;
+  const prevDue = Number(o.previous_orders_due || 0);
+  const overallDue = Number(o.overall_customer_due || o.due || 0);
+  if (prevDue > 0) {
+    balanceText += `\nPrevious Outstanding Balance: ${money(prevDue)}\nTotal Outstanding Customer Balance: ${money(overallDue)}`;
+  }
+
+  return `Namaste ${o.customer}! 🙏\nYour stitching bill ${o.order_number} from Jolly Ladies Tailor has been generated.\n\nGarments & Services:\n${itemsList}\n\nTotal for this Bill: ${money(o.total)}\nAmount Paid: ${money(o.amount_paid)}\n${balanceText}\nPromised Delivery: ${dueD}\n\nView and download your digital e-bill & official PDF:\n${billUrl}\n\nThank you for choosing Jolly Ladies Tailor!\nSouthern Avenue, Kolkata · Phone: 9748546778`;
 }
 
 function executeWhatsAppShare() {

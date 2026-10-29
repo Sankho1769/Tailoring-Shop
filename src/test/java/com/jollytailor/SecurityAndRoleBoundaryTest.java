@@ -126,4 +126,55 @@ class SecurityAndRoleBoundaryTest {
                         .content(mapper.writeValueAsString(Map.of("name", "Test", "phone", "1234567890"))))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    @DisplayName("Security response headers are properly configured")
+    void testSecurityResponseHeaders() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Frame-Options", "DENY"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("Referrer-Policy", "strict-origin-when-cross-origin"))
+                .andExpect(header().exists("Content-Security-Policy"))
+                .andExpect(header().exists("Permissions-Policy"));
+    }
+
+    @Test
+    @DisplayName("Robots.txt and Sitemap.xml are publicly accessible with correct content")
+    void testRobotsAndSitemapAccessible() throws Exception {
+        mockMvc.perform(get("/robots.txt"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("User-agent: *")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Disallow: /admin.html")));
+
+        mockMvc.perform(get("/sitemap.xml"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("https://jollyladiestailor.com/")));
+    }
+
+    @Test
+    @DisplayName("Login rate limiting triggers 429 Too Many Requests after 10 attempts within a minute")
+    void testLoginRateLimiting() throws Exception {
+        String testIp = "203.0.113.195";
+        Map<String, String> creds = Map.of("username", "testadmin", "password", "wrongpass");
+
+        // First 10 attempts fail with 401 Unauthorized (rate limiter records attempt)
+        for (int i = 0; i < 10; i++) {
+            mockMvc.perform(post("/api/auth/login")
+                            .header("X-Forwarded-For", testIp)
+                            .with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(mapper.writeValueAsString(creds)))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        // 11th attempt is blocked by rate limiter with 429 Too Many Requests
+        mockMvc.perform(post("/api/auth/login")
+                        .header("X-Forwarded-For", testIp)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(creds)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(status().reason(org.hamcrest.Matchers.containsString("Too many login attempts")));
+    }
 }
