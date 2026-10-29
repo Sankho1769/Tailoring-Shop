@@ -1,0 +1,525 @@
+package com.jollytailor;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.*;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.hamcrest.Matchers.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+class OrderAndBillingIntegrationTest {
+
+    @Autowired private MockMvc mockMvc;
+    @Autowired private ObjectMapper mapper;
+
+    @Test
+    @DisplayName("Complete Order Lifecycle: Creation, Items, Advance, Status Progression, Final Payment & Refund")
+    @WithMockUser(username = "testtailor", roles = {"TAILOR"})
+    void testOrderAndPaymentLifecycle() throws Exception {
+        // 1. Create Customer
+        String custRes = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Sunita Sen", "phone", "9831122334"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(custRes, Map.class).get("id");
+
+        // 2. Add Measurement
+        String measRes = mockMvc.perform(post("/api/tailor/customers/" + customerId + "/measurements")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "garmentType", "Salwar / Kameez",
+                                "unit", "in",
+                                "dimensions", Map.of("bust", "38", "waist", "32", "kameezLength", "42")
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String measurementId = (String) mapper.readValue(measRes, Map.class).get("id");
+
+        // 3. Create Order with 2 services, discount, and advance payment
+        List<Map<String, Object>> items = List.of(
+                Map.of("name", "Salwar Stitching", "quantity", 1, "rate", 650.00),
+                Map.of("name", "Peko & False Par", "quantity", 1, "rate", 150.00)
+        );
+
+        Map<String, Object> orderPayload = Map.of(
+                "customerId", customerId,
+                "measurementId", measurementId,
+                "dueDate", "2026-11-15",
+                "notes", "Fabric supplied by customer. Urgent delivery.",
+                "discount", 50.00,
+                "advanceAmount", 300.00,
+                "advanceMethod", "UPI",
+                "advanceRef", "UPI-TXN-12345",
+                "items", items
+        );
+
+        String orderRes = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(orderPayload)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order_number", startsWith("JLT-")))
+                .andExpect(jsonPath("$.status", is("NEW")))
+                .andExpect(jsonPath("$.payment_status", is("PARTIALLY_PAID")))
+                .andExpect(jsonPath("$.subtotal", is(800.0)))
+                .andExpect(jsonPath("$.discount", is(50.0)))
+                .andExpect(jsonPath("$.total", is(750.0)))
+                .andExpect(jsonPath("$.amount_paid", is(300.0)))
+                .andExpect(jsonPath("$.due", is(450.0)))
+                .andExpect(jsonPath("$.items", hasSize(2)))
+                .andExpect(jsonPath("$.payments", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+
+        String orderId = (String) mapper.readValue(orderRes, Map.class).get("id");
+
+        // 4. Update status through exact required lifecycle: In Progress -> Trial -> Ready -> Delivered
+        for (String status : List.of("IN_PROGRESS", "TRIAL", "READY", "DELIVERED")) {
+            mockMvc.perform(patch("/api/tailor/orders/" + orderId + "/status")
+                            .with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(mapper.writeValueAsString(Map.of("status", status))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status", is(status)));
+        }
+
+        // 5. Try overpaying (should fail with 400 Bad Request)
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 500.00, "method", "CASH"))))
+                .andExpect(status().isBadRequest());
+
+        // 6. Record remaining balance payment of 450.00
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 450.00, "method", "CASH", "reference", "Final settlement"))))
+                .andExpect(status().isCreated());
+
+        // Verify order is now fully PAID
+        mockMvc.perform(get("/api/tailor/orders/" + orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.payment_status", is("PAID")))
+                .andExpect(jsonPath("$.amount_paid", is(750.0)))
+                .andExpect(jsonPath("$.due", is(0.0)))
+                .andExpect(jsonPath("$.payments", hasSize(2)));
+
+        // 7. Record a partial refund of 100.00
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/refunds")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 100.00, "reason", "Customer fabric discount adjustment"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.paymentStatus", is("PARTIALLY_PAID")))
+                .andExpect(jsonPath("$.newAmountPaid", is(650.0)));
+
+        // 8. Update order details without changing order ID or duplicating
+        mockMvc.perform(patch("/api/tailor/orders/" + orderId)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "dueDate", "2026-11-20",
+                                "notes", "Updated notes: customer confirmed delivery time"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(orderId)))
+                .andExpect(jsonPath("$.notes", containsString("customer confirmed delivery time")))
+                .andExpect(jsonPath("$.due_date", is("2026-11-20")));
+    }
+
+    @Test
+    @DisplayName("Admin Pricing, Tailor Override Audit, Historical Immutability & Tailor Payment QR")
+    @WithMockUser(username = "admin_user", roles = {"ADMIN"})
+    void testAdminPricingAndTailorOverrides() throws Exception {
+        // 1. Admin creates a service with default rate 800.00
+        String prodRes = mockMvc.perform(post("/api/admin/products")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Heavy Embroidery Blouse",
+                                "defaultRate", 800.00,
+                                "productType", "SERVICE",
+                                "description", "Hand zardozi work"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.defaultRate", is(800.0)))
+                .andExpect(jsonPath("$.productType", is("SERVICE")))
+                .andReturn().getResponse().getContentAsString();
+        String productId = (String) mapper.readValue(prodRes, Map.class).get("id");
+
+        // 2. Also create a ready-made stock item
+        mockMvc.perform(post("/api/admin/products")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Readymade Cotton Kurti - M",
+                                "defaultRate", 450.00,
+                                "productType", "READY_MADE",
+                                "stockQuantity", 12
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.productType", is("READY_MADE")))
+                .andExpect(jsonPath("$.stockQuantity", is(12)));
+
+        // 3. Tailor creates customer and order overriding default rate (800 -> 950 with custom latkan reason)
+        String custRes = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Ananya Roy", "phone", "9830099887"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(custRes, Map.class).get("id");
+
+        String orderRes = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", customerId,
+                                "items", List.of(Map.of(
+                                        "productId", productId,
+                                        "name", "Heavy Embroidery Blouse",
+                                        "quantity", 1,
+                                        "defaultRate", 800.00,
+                                        "rate", 950.00,
+                                        "adjustmentReason", "Customer requested heavy handmade silk latkan"
+                                ))
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.total", is(950.0)))
+                .andExpect(jsonPath("$.items[0].default_rate", is(800.0)))
+                .andExpect(jsonPath("$.items[0].unit_rate", is(950.0)))
+                .andExpect(jsonPath("$.items[0].adjustment_reason", containsString("latkan")))
+                .andReturn().getResponse().getContentAsString();
+        String orderId = (String) mapper.readValue(orderRes, Map.class).get("id");
+
+        // 4. Admin inspects price adjustments audit endpoint
+        mockMvc.perform(get("/api/admin/price-adjustments"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$[0].item_name", is("Heavy Embroidery Blouse")))
+                .andExpect(jsonPath("$[0].default_rate", is(800.0)))
+                .andExpect(jsonPath("$[0].unit_rate", is(950.0)))
+                .andExpect(jsonPath("$[0].difference", is(150.0)))
+                .andExpect(jsonPath("$[0].adjustment_reason", containsString("latkan")));
+
+        // 5. Admin updates the global default rate of the product to 1000.00
+        mockMvc.perform(patch("/api/admin/products/" + productId)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("defaultRate", 1000.00))))
+                .andExpect(status().isOk());
+
+        // 6. Verify historical immutability: previously generated bill still has 950.00 total and 800.00 default
+        mockMvc.perform(get("/api/tailor/orders/" + orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total", is(950.0)))
+                .andExpect(jsonPath("$.items[0].unit_rate", is(950.0)))
+                .andExpect(jsonPath("$.items[0].default_rate", is(800.0)));
+
+        // 7. Verify Tailor Workspace GPay QR endpoint
+        mockMvc.perform(get("/api/tailor/payment-qr"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shopName").isNotEmpty())
+                .andExpect(jsonPath("$.upiId").isNotEmpty())
+                .andExpect(jsonPath("$.adminNotificationPhone").isNotEmpty());
+
+        // 8. Verify public customer e-bill endpoint
+        mockMvc.perform(get("/api/public/bills/" + orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.order_number", startsWith("JLT-")))
+                .andExpect(jsonPath("$.customer_name", is("Ananya Roy")))
+                .andExpect(jsonPath("$.customer_phone_masked", startsWith("XXXXXX")))
+                .andExpect(jsonPath("$.customer_phone").doesNotExist())
+                .andExpect(jsonPath("$.total", is(950.0)))
+                .andExpect(jsonPath("$.items[0].item_name", is("Heavy Embroidery Blouse")))
+                .andExpect(jsonPath("$.shop.name").isNotEmpty());
+
+        // Verify phone verification on public e-bill
+        mockMvc.perform(get("/api/public/bills/" + orderId + "?phone=9830099887"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/public/bills/" + orderId + "?phone=1111111111"))
+                .andExpect(status().isForbidden());
+
+        // 9. Verify public /api/public/shop does NOT expose internal payment QR or UPI ID as checkout feature
+        mockMvc.perform(get("/api/public/shop"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.gpay_qr_key").doesNotExist())
+                .andExpect(jsonPath("$.upi_id").doesNotExist())
+                .andExpect(jsonPath("$.shop_name").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("Inventory Stock: Atomic deduction, insufficient stock rejection, and restock on cancellation")
+    @WithMockUser(username = "admin_user", roles = {"ADMIN"})
+    void testInventoryStockProtection() throws Exception {
+        // 1. Admin creates ready-made product with stock 5
+        String prodRes = mockMvc.perform(post("/api/admin/products")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "name", "Silk Saree with Blouse Piece",
+                                "defaultRate", 1200.00,
+                                "productType", "READY_MADE",
+                                "stockQuantity", 5
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String prodId = (String) mapper.readValue(prodRes, Map.class).get("id");
+
+        // 2. Create customer
+        String custRes = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Tanushree Das", "phone", "9832233445"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String custId = (String) mapper.readValue(custRes, Map.class).get("id");
+
+        // 3. Purchase 2 units
+        String orderRes = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", custId,
+                                "items", List.of(Map.of(
+                                        "productId", prodId,
+                                        "name", "Silk Saree with Blouse Piece",
+                                        "quantity", 2,
+                                        "rate", 1200.00
+                                ))
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String orderId = (String) mapper.readValue(orderRes, Map.class).get("id");
+
+        // 4. Verify stock is now 3 (5 - 2)
+        mockMvc.perform(get("/api/admin/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '" + prodId + "')].stock_quantity").value(3));
+
+        // 5. Try purchasing 4 units (more than 3 available) -> should fail with 400 Bad Request
+        mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", custId,
+                                "items", List.of(Map.of(
+                                        "productId", prodId,
+                                        "name", "Silk Saree with Blouse Piece",
+                                        "quantity", 4,
+                                        "rate", 1200.00
+                                ))
+                        ))))
+                .andExpect(status().isBadRequest());
+
+        // 6. Cancel the order -> should restock 2 units back to 5
+        mockMvc.perform(patch("/api/tailor/orders/" + orderId + "/status")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("status", "CANCELLED"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '" + prodId + "')].stock_quantity").value(5));
+    }
+
+    @Test
+    @DisplayName("Editing Order Items: Replace items and recalculate totals via PATCH without creating duplicate orders")
+    @WithMockUser(username = "testtailor", roles = {"TAILOR"})
+    void testOrderEditingWithItemReplacementWithoutDuplicates() throws Exception {
+        // 1. Create Customer
+        String custRes = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Rupa Roy", "phone", "9831998877"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(custRes, Map.class).get("id");
+
+        // 2. Create initial order with 1 item: Blouse Stitching (₹400)
+        String orderRes = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", customerId,
+                                "items", List.of(Map.of("name", "Blouse Stitching", "quantity", 1, "rate", 400.00))
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.total", is(400.0)))
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andReturn().getResponse().getContentAsString();
+        Map<?,?> orderMap = mapper.readValue(orderRes, Map.class);
+        String orderId = (String) orderMap.get("id");
+        String orderNumber = (String) orderMap.get("order_number");
+
+        // Count customer orders before edit
+        mockMvc.perform(get("/api/tailor/customers/" + customerId + "/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+
+        // 3. Edit order via PATCH: replace items with Kurti (₹600) and Salwar (₹400), with ₹50 discount
+        List<Map<String, Object>> newItems = List.of(
+                Map.of("name", "Kurti Stitching", "quantity", 1, "rate", 600.00),
+                Map.of("name", "Salwar Stitching", "quantity", 1, "rate", 400.00)
+        );
+
+        mockMvc.perform(patch("/api/tailor/orders/" + orderId)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "items", newItems,
+                                "discount", 50.00,
+                                "notes", "Customer changed garment request to Kurti + Salwar set"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(orderId)))
+                .andExpect(jsonPath("$.order_number", is(orderNumber)))
+                .andExpect(jsonPath("$.subtotal", is(1000.0)))
+                .andExpect(jsonPath("$.discount", is(50.0)))
+                .andExpect(jsonPath("$.total", is(950.0)))
+                .andExpect(jsonPath("$.due", is(950.0)))
+                .andExpect(jsonPath("$.items", hasSize(2)))
+                .andExpect(jsonPath("$.notes", containsString("Kurti + Salwar set")));
+
+        // 4. Verify that customer STILL has exactly 1 order (NO duplicate order created)
+        mockMvc.perform(get("/api/tailor/customers/" + customerId + "/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id", is(orderId)))
+                .andExpect(jsonPath("$[0].total", is(950.0)));
+    }
+
+    @Test
+    @DisplayName("Payment Workflow: Partial payment, excess rejection, rapid duplicate prevention, idempotency & full settlement")
+    @WithMockUser(username = "testtailor", roles = {"TAILOR"})
+    void testPaymentWorkflowWithPartialSettlementAndDeduplication() throws Exception {
+        // 1. Create Customer
+        String custRes = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Ananya Mukherjee", "phone", "9830554433"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(custRes, Map.class).get("id");
+
+        // 2. Create Order for ₹1000 with ₹0 advance
+        String orderRes = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", customerId,
+                                "items", List.of(Map.of("name", "Designer Lehenga Stitching", "quantity", 1, "rate", 1000.00))
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.total", is(1000.0)))
+                .andExpect(jsonPath("$.amount_paid", is(0.0)))
+                .andExpect(jsonPath("$.due", is(1000.0)))
+                .andExpect(jsonPath("$.payment_status", is("PAYMENT_DUE")))
+                .andReturn().getResponse().getContentAsString();
+        String orderId = (String) mapper.readValue(orderRes, Map.class).get("id");
+
+        // 3. Reject invalid payment amounts (<= 0)
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 0, "method", "CASH"))))
+                .andExpect(status().isBadRequest());
+
+        // 4. Reject payment exceeding total balance (> ₹1000)
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 1200.00, "method", "UPI"))))
+                .andExpect(status().isBadRequest());
+
+        // 5. Record valid partial payment of ₹400 via UPI
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 400.00,
+                                "method", "UPI",
+                                "reference", "UPI-GPAY-REC-9988"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(400.0)))
+                .andExpect(jsonPath("$.order.due", is(600.0)))
+                .andExpect(jsonPath("$.order.payment_status", is("PARTIALLY_PAID")));
+
+        // 6. Test rapid double submission: submitting identical ₹400 UPI payment immediately triggers 409 Conflict
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 400.00,
+                                "method", "UPI"
+                        ))))
+                .andExpect(status().isConflict());
+
+        // 7. Reject payment exceeding new remaining balance (> ₹600)
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 650.00, "method", "CASH"))))
+                .andExpect(status().isBadRequest());
+
+        // 8. Test Idempotency Key: submitting payment with idempotency key
+        String idempKey = "KEY-IDEMP-" + UUID.randomUUID();
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 100.00,
+                                "method", "CASH",
+                                "idempotencyKey", idempKey
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(500.0)))
+                .andExpect(jsonPath("$.order.due", is(500.0)));
+
+        // Resubmitting with the same idempotency key should safely return the existing payment without debiting again
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 100.00,
+                                "method", "CASH",
+                                "idempotencyKey", idempKey
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(500.0)));
+
+        // 9. Record final settlement of remaining ₹500
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 500.00,
+                                "method", "CASH",
+                                "note", "Final settlement on delivery"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(1000.0)))
+                .andExpect(jsonPath("$.order.due", is(0.0)))
+                .andExpect(jsonPath("$.order.payment_status", is("PAID")));
+    }
+}

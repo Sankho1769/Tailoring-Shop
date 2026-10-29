@@ -1,0 +1,12 @@
+.env
+target/
+.idea/
+.vscode/
+*.iml
+.DS_Store
+*.log
+data/
+*.mv.db
+*.trace.db
+powershell.exe
+

@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tailor Workspace | Jolly Ladies Tailor</title>
+  <link rel="icon" type="image/png" href="/images/jolly-ladies-tailor-logo.png">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Logo" class="brand-logo">
+    <div>
+      <h1>Tailor Workspace</h1>
+      <small>JOLLY LADIES TAILOR</small>
+    </div>
+  </a>
+  <nav class="navlinks">
+    <a href="/">Consumer Website</a>
+    <a href="/admin.html">Admin Console</a>
+    <button id="logout" class="hidden" type="button">Log out</button>
+  </nav>
+</header>
+
+<main>
+  <!-- Login Panel -->
+  <section id="loginPanel" class="panel login-wrap" style="text-align:center">
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Sewing Machine Logo" class="brand-logo-lg">
+    <div class="eyebrow">Staff access</div>
+    <h2>Tailor login</h2>
+    <p class="muted">Sign in to manage customers, measurements, orders, and payments.</p>
+    <form id="loginForm" style="text-align:left">
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" required autocomplete="username" placeholder="e.g. tailor1">
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label for="password">Password</label>
+        <input id="password" type="password" required autocomplete="current-password">
+      </div>
+      <div class="form-actions">
+        <button class="btn orange" type="submit">Sign in</button>
+      </div>
+      <div id="loginNotice" class="notice" hidden></div>
+    </form>
+  </section>
+
+  <!-- Workspace Container -->
+  <div id="workspace" class="hidden">
+    <!-- Workspace Top Header -->
+    <div class="toolbar" style="margin-bottom:12px">
+      <div>
+        <div class="eyebrow">Customer-First Tailoring Operations</div>
+        <h2 style="font:700 28px Georgia,serif;color:var(--violet);margin:4px 0">Tailor Workspace</h2>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="whoami" class="pill">Signed in</span>
+        <button id="switchCustomerTopBtn" class="btn ghost btn-sm hidden" type="button">🔄 Switch Customer</button>
+      </div>
+    </div>
+
+    <!-- 5-Stage Sequential Workflow Progress Stepper -->
+    <nav class="workflow-steps" aria-label="Customer-First Tailoring Workflow">
+      <div id="stepNav1" class="workflow-step active" onclick="goToStage(1)">
+        <span class="step-num">1</span>
+        <span>Customer</span>
+      </div>
+      <span class="workflow-step-divider">›</span>
+      <div id="stepNav2" class="workflow-step" onclick="goToStage(2)">
+        <span class="step-num">2</span>
+        <span>Garments & Order</span>
+      </div>
+      <span class="workflow-step-divider">›</span>
+      <div id="stepNav3" class="workflow-step" onclick="goToStage(3)">
+        <span class="step-num">3</span>
+        <span>Bill Summary</span>
+      </div>
+      <span class="workflow-step-divider">›</span>
+      <div id="stepNav4" class="workflow-step" onclick="goToStage(4)">
+        <span class="step-num">4</span>
+        <span>Payment</span>
+      </div>
+      <span class="workflow-step-divider">›</span>
+      <div id="stepNav5" class="workflow-step" onclick="goToStage(5)">
+        <span class="step-num">5</span>
+        <span>WhatsApp & Invoice</span>
+      </div>
+    </nav>
+
+    <!-- Global Workspace Notice -->
+    <div id="workspaceNotice" class="notice" hidden></div>
+
+    <!-- Persistent Customer Header Bar (Visible when a customer is active) -->
+    <div id="selectedCustomerBar" class="customer-summary-card hidden">
+      <div class="customer-summary-header">
+        <div class="customer-summary-info">
+          <div class="eyebrow" style="color:var(--orange)">Selected Customer</div>
+          <h2 id="hubCustomerName">Customer Name</h2>
+          <div class="phone-badge">
+            <span>📱</span> <span id="hubCustomerPhone">Phone</span>
+            <a id="hubCustomerWaLink" href="#" target="_blank" rel="noopener noreferrer" class="pill" style="margin-left:6px;text-decoration:none;background:#25D366;color:#fff">💬 WhatsApp</a>
+          </div>
+          <p id="hubCustomerAddress" class="muted" style="margin:4px 0 0 0;font-size:13px"></p>
+          <p id="hubCustomerNotes" style="margin:4px 0 0 0;font-size:13px;color:var(--violet);font-style:italic"></p>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="hubNewOrderBtn" class="btn orange btn-sm" type="button" onclick="startNewOrder()">✂️ New Order</button>
+          <button id="toggleMeasureHubBtn" class="btn light btn-sm" type="button" onclick="toggleMeasurementHub()">📐 Measurements (<span id="measureCountBadge">0</span>)</button>
+          <button id="toggleCustomerOrdersBtn" class="btn light btn-sm" type="button" onclick="toggleCustomerOrdersList()">🧵 Orders (<span id="ordersCountBadge">0</span>)</button>
+          <button id="hubEditCustomerBtn" class="btn ghost btn-sm" type="button" onclick="openEditCustomerBox()">✏️ Edit</button>
+          <button id="hubSwitchCustomerBtn" class="btn ghost btn-sm" type="button" onclick="switchBackToCustomerSearch()">🔄 Switch</button>
+        </div>
+      </div>
+
+      <!-- Customer Metrics Summary -->
+      <div class="customer-metrics">
+        <div class="customer-metric-box">
+          <span>Total Orders</span>
+          <strong id="metricTotalOrders">0</strong>
+        </div>
+        <div class="customer-metric-box">
+          <span>Active Orders</span>
+          <strong id="metricActiveOrders" style="color:var(--orange)">0</strong>
+        </div>
+        <div class="customer-metric-box">
+          <span>Outstanding Due</span>
+          <strong id="metricOutstandingDue" style="color:#b30000">₹0.00</strong>
+        </div>
+        <div class="customer-metric-box">
+          <span>Latest Measurements</span>
+          <strong id="metricLatestMeasureDate" style="font-size:14px">—</strong>
+        </div>
+      </div>
+
+      <!-- Inline Edit Customer Form (Collapsible) -->
+      <div id="editCustomerBox" class="panel hidden" style="margin-top:16px;border:1.5px dashed var(--violet)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h4 style="margin:0;color:var(--violet)">Edit Customer Information</h4>
+          <button id="cancelEditCustomerBtn" class="btn ghost btn-sm" type="button" onclick="closeEditCustomerBox()">✕ Close</button>
+        </div>
+        <form id="editCustomerForm">
+          <div class="grid">
+            <div class="field">
+              <label for="editCustName">Full Name *</label>
+              <input id="editCustName" required maxlength="160">
+            </div>
+            <div class="field">
+              <label for="editCustPhone">Mobile Number *</label>
+              <input id="editCustPhone" required maxlength="15">
+            </div>
+            <div class="field full">
+              <label for="editCustAddress">Address</label>
+              <textarea id="editCustAddress" rows="2"></textarea>
+            </div>
+            <div class="field full">
+              <label for="editCustNotes">Preferences / Fitting Notes</label>
+              <textarea id="editCustNotes" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn" type="submit">Save Changes</button>
+            <button id="cancelEditCustomerBtn2" class="btn ghost" type="button" onclick="closeEditCustomerBox()">Cancel</button>
+          </div>
+          <div id="editCustNotice" class="notice" hidden></div>
+        </form>
+      </div>
+
+      <!-- Collapsible Measurement Hub & Recording -->
+      <div id="measureHubDrawer" class="panel hidden" style="margin-top:16px;border:2px solid var(--violet)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div>
+            <h3 style="margin:0;color:var(--violet)">📐 Garment Measurements for <span class="customer-name-label"></span></h3>
+            <p class="muted" style="margin:2px 0 0 0;font-size:13px">Saved measurement profiles for accurate cuts and repeated orders.</p>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn light btn-sm" type="button" onclick="openMeasurementForm(selectedGarment)">＋ Take New Measurement</button>
+            <button class="btn ghost btn-sm" type="button" onclick="toggleMeasurementHub()">✕ Close</button>
+          </div>
+        </div>
+
+        <!-- Garment Selector Pills -->
+        <div class="garment-tabs" id="garmentTabButtons">
+          <button class="garment-tab-btn active" data-garment="Blouse" type="button" onclick="selectGarmentTab('Blouse')">Blouse</button>
+          <button class="garment-tab-btn" data-garment="Kurti" type="button" onclick="selectGarmentTab('Kurti')">Kurti</button>
+          <button class="garment-tab-btn" data-garment="Salwar / Kameez" type="button" onclick="selectGarmentTab('Salwar / Kameez')">Salwar / Kameez</button>
+          <button class="garment-tab-btn" data-garment="Lehenga" type="button" onclick="selectGarmentTab('Lehenga')">Lehenga</button>
+          <button class="garment-tab-btn" data-garment="Pant" type="button" onclick="selectGarmentTab('Pant')">Pant</button>
+          <button class="garment-tab-btn" data-garment="Frock" type="button" onclick="selectGarmentTab('Frock')">Frock</button>
+          <button class="garment-tab-btn" data-garment="Alteration" type="button" onclick="selectGarmentTab('Alteration')">Alteration</button>
+          <button class="garment-tab-btn" data-garment="False Par & Peko" type="button" onclick="selectGarmentTab('False Par & Peko')">False Par & Peko</button>
+          <button class="garment-tab-btn" data-garment="General body measurements" type="button" onclick="selectGarmentTab('General body measurements')">General</button>
+        </div>
+
+        <!-- Selected Garment Snapshot Highlight Card -->
+        <div id="garmentSnapshotDisplay" class="snapshot-card">
+          <!-- Filled dynamically -->
+        </div>
+
+        <!-- Measurement Recording / Editing Card (Collapsible) -->
+        <div id="measureFormCard" class="panel hidden" style="margin:16px 0;border:1.5px solid var(--violet)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h4 id="measureFormTitle" style="margin:0;color:var(--violet)">Record Measurement Snapshot</h4>
+            <button class="btn ghost btn-sm" type="button" onclick="closeMeasurementForm()">✕ Cancel</button>
+          </div>
+          <form id="recordMeasurementForm">
+            <div class="grid">
+              <div class="field">
+                <label for="measureGarmentSelect">Garment Type *</label>
+                <select id="measureGarmentSelect">
+                  <option value="Blouse">Blouse</option>
+                  <option value="Kurti">Kurti</option>
+                  <option value="Salwar / Kameez">Salwar / Kameez</option>
+                  <option value="Lehenga">Lehenga</option>
+                  <option value="Pant">Pant</option>
+                  <option value="Frock">Frock</option>
+                  <option value="Alteration">Alteration</option>
+                  <option value="False Par & Peko">False Par & Peko</option>
+                  <option value="General body measurements">General body measurements</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="measureUnitSelect">Measurement Unit</label>
+                <select id="measureUnitSelect">
+                  <option value="in">Inches (in)</option>
+                  <option value="cm">Centimetres (cm)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Dynamic Garment Dimensions Grid -->
+            <div id="dynamicMeasureFields" class="measure-grid" style="margin-top:12px"></div>
+
+            <div class="grid" style="margin-top:12px">
+              <div class="field">
+                <label for="measureFitPref">Fitting Preference</label>
+                <select id="measureFitPref">
+                  <option value="Regular">Regular</option>
+                  <option value="Fitted / Slim">Fitted / Slim</option>
+                  <option value="Comfort / Loose">Comfort / Loose</option>
+                  <option value="Custom as discussed">Custom as discussed</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="measureSpecialNotes">Special Cut / Stitching Notes</label>
+                <input id="measureSpecialNotes" placeholder="Neck cut, sleeve style, lining, piping, latkan...">
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn orange" type="submit">💾 Save Measurement Snapshot</button>
+              <button class="btn ghost" type="button" onclick="closeMeasurementForm()">Cancel</button>
+            </div>
+            <div id="measureNotice" class="notice" hidden></div>
+          </form>
+        </div>
+
+        <!-- History Table -->
+        <div style="margin-top:16px">
+          <h4 style="margin:0 0 8px 0;color:var(--violet)">Measurement Snapshots History</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Garment</th>
+                  <th>Unit</th>
+                  <th>Date Recorded</th>
+                  <th>Fit Preference</th>
+                  <th>Key Dimensions</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="measureHistoryRows">
+                <tr><td colspan="6">Loading measurement history...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Collapsible Customer Orders List Drawer -->
+      <div id="customerOrdersDrawer" class="panel hidden" style="margin-top:16px;border:1.5px solid var(--violet)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 style="margin:0;color:var(--violet)">All Orders for <span class="customer-name-label"></span></h3>
+          <button class="btn ghost btn-sm" type="button" onclick="toggleCustomerOrdersList()">✕ Close</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Bill #</th>
+                <th>Created</th>
+                <th>Status</th>
+                <th>Payment</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Due</th>
+                <th>Delivery Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="customerOrdersTableBody">
+              <tr><td colspan="9">Loading orders...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- STAGE 1: Customer-First Selection & Registration                         -->
+    <!-- ========================================================================= -->
+    <section id="stage1View" class="section" style="margin-top:0">
+      <div class="search-hero">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+          <div>
+            <h2>1. Find or Register Customer</h2>
+            <p class="muted" style="margin:4px 0 0 0">Search by customer name or 10-digit mobile number to open profile and continue, or add a new customer.</p>
+          </div>
+          <button id="showNewCustomerBtn" class="btn orange" type="button" onclick="openNewCustomerForm()">＋ Add New Customer</button>
+        </div>
+
+        <div class="search-bar-wrap">
+          <input id="customerSearchInput" type="search" placeholder="Search by customer name or mobile number (e.g. Sunita or 9831)..." autocomplete="off" autofocus>
+          <button id="searchBtn" class="btn" type="button" onclick="searchCustomers(val('customerSearchInput'))">Search</button>
+        </div>
+      </div>
+
+      <!-- New Customer Registration Form (Collapsible) -->
+      <div id="newCustomerCard" class="panel hidden" style="margin-bottom:24px;border:2px solid var(--pink)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h3 style="margin:0;font-family:Georgia,serif;color:var(--violet)">＋ Register New Customer</h3>
+          <button id="cancelNewCustomerBtn" class="btn ghost btn-sm" type="button" onclick="closeNewCustomerForm()">✕ Cancel</button>
+        </div>
+
+        <div id="duplicatePhoneWarning" class="notice" hidden></div>
+
+        <form id="newCustomerForm">
+          <div class="grid">
+            <div class="field">
+              <label for="newCustName">Full Name *</label>
+              <input id="newCustName" required maxlength="160" placeholder="e.g. Sunita Sen">
+            </div>
+            <div class="field">
+              <label for="newCustPhone">Mobile Number *</label>
+              <input id="newCustPhone" required maxlength="15" inputmode="tel" placeholder="e.g. 9831122334">
+            </div>
+            <div class="field full">
+              <label for="newCustAddress">Address <span class="muted">(Optional)</span></label>
+              <textarea id="newCustAddress" rows="2" placeholder="Local address, landmark, area"></textarea>
+            </div>
+            <div class="field full">
+              <label for="newCustNotes">Fitting Preferences / Notes <span class="muted">(Optional)</span></label>
+              <textarea id="newCustNotes" rows="2" placeholder="Fabric preferences, fitting likes/dislikes, special reminders"></textarea>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button id="saveNewCustomerBtn" class="btn orange" type="submit">Save & Continue to Order →</button>
+            <button id="cancelNewCustomerBtn2" class="btn ghost" type="button" onclick="closeNewCustomerForm()">Cancel</button>
+          </div>
+          <div id="newCustNotice" class="notice" hidden></div>
+        </form>
+      </div>
+
+      <!-- Live Search Results Grid -->
+      <div id="searchResultsSection">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h3 id="searchResultsTitle" style="margin:0;font-size:16px;color:var(--violet)">Matching Customers</h3>
+          <span id="searchResultsCount" class="pill">Loading customers...</span>
+        </div>
+        <div id="customerResultsGrid" class="customer-results">
+          <!-- Dynamic customer cards -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- STAGE 2: Order & Garment Selection                                        -->
+    <!-- ========================================================================= -->
+    <section id="stage2View" class="hidden" style="margin-top:0">
+      <!-- Active Open Orders for Resuming / Updating -->
+      <div id="existingOpenOrdersCard" class="panel hidden" style="margin-bottom:18px;background:#fefbfd;border:1.5px solid #e7b0de">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h4 style="margin:0;color:var(--violet)">Existing Open Orders for <span class="customer-name-label"></span></h4>
+          <span class="pill orange">Select an open order to edit or continue below with a new order</span>
+        </div>
+        <div id="existingOpenOrdersList" style="display:grid;gap:10px"></div>
+      </div>
+
+      <div class="stage-card">
+        <div class="stage-header">
+          <div>
+            <span id="orderEditorModeBadge" class="pill orange">Mode: Creating New Order</span>
+            <h3 id="orderEditorTitle" class="stage-title" style="margin-top:4px">2. Select Garments & Configure Order</h3>
+            <p class="muted" style="margin:4px 0 0 0">Choose stitching services, override rates if required, attach measurements, and set delivery date.</p>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn ghost btn-sm" type="button" onclick="resetOrderForm()">Clear / Reset</button>
+          </div>
+        </div>
+
+        <!-- Service / Garment Selection -->
+        <div class="divider-title">A · Select Garment / Service & Agreed Rate</div>
+        <div class="grid">
+          <div class="field">
+            <label for="orderProduct">Garment / Stitching Service *</label>
+            <select id="orderProduct" onchange="updateRate()"></select>
+          </div>
+          <div class="field">
+            <label for="orderRate">
+              Unit Rate (₹)
+              <span id="defaultRateBadge" class="pill" style="font-size:11px">Default: ₹0.00</span>
+            </label>
+            <input type="number" min="0" step="0.01" id="orderRate" value="0">
+          </div>
+          <div class="field">
+            <label for="orderQty">Quantity</label>
+            <input type="number" min="1" id="orderQty" value="1">
+          </div>
+          <div class="field" id="adjustmentReasonWrap">
+            <label for="orderReason">Rate Adjustment Reason <span class="muted">(if modified from standard)</span></label>
+            <input id="orderReason" placeholder="e.g. Heavy zardozi, custom latkan, special lining, loyalty discount">
+          </div>
+        </div>
+        <div class="form-actions" style="margin-top:10px">
+          <button id="addOrderItemBtn" class="btn light" type="button" onclick="addCartItem()">＋ Add Item to Bill</button>
+        </div>
+
+        <!-- Order Items Cart Table -->
+        <div class="table-wrap" style="margin-top:16px">
+          <table>
+            <thead>
+              <tr>
+                <th>Service / Garment</th>
+                <th>Default Rate</th>
+                <th>Agreed Rate</th>
+                <th>Qty</th>
+                <th>Amount</th>
+                <th style="width:60px">Remove</th>
+              </tr>
+            </thead>
+            <tbody id="cartTableBody">
+              <tr><td colspan="6">No services added to bill yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin:14px 0;display:flex;justify-content:flex-end;gap:20px;font-size:16px">
+          <span>Subtotal: <strong id="cartSubtotalText">₹0.00</strong></span>
+          <span>Discount: <strong id="cartDiscountText" style="color:var(--orange)">-₹0.00</strong></span>
+          <span>Payable: <strong id="cartTotalText" style="color:var(--violet);font-size:18px">₹0.00</strong></span>
+        </div>
+
+        <!-- Measurements Attachment & Delivery Settings -->
+        <div class="divider-title" style="margin-top:18px">B · Measurements, Delivery Date & Stitching Notes</div>
+        <div class="grid">
+          <div class="field">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <label for="orderMeasurementSelect">Attached Measurement Snapshot</label>
+              <button class="btn ghost btn-sm" type="button" style="padding:2px 8px;font-size:11px" onclick="openMeasurementForm(selectedGarment)">＋ Take New</button>
+            </div>
+            <select id="orderMeasurementSelect">
+              <option value="">No measurement profile attached</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="orderDueDate">Promised Delivery Date</label>
+            <input id="orderDueDate" type="date">
+          </div>
+          <div class="field">
+            <label for="orderDiscount">Overall Bill Discount (₹)</label>
+            <input id="orderDiscount" type="number" min="0" step="0.01" value="0" oninput="drawCart()">
+          </div>
+          <div class="field" id="orderStatusFieldWrap" hidden>
+            <label for="orderStatusSelect">Order Status</label>
+            <select id="orderStatusSelect">
+              <option value="NEW">New</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="TRIAL">Trial</option>
+              <option value="READY">Ready</option>
+              <option value="DELIVERED">Delivered</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label for="orderNotes">Fabric & Special Stitching Instructions</label>
+            <input id="orderNotes" placeholder="Customer fabric color, lining type, urgent delivery notes, piping details...">
+          </div>
+        </div>
+
+        <!-- Primary Action: Generate Bill -->
+        <div class="form-actions" style="margin-top:24px;justify-content:space-between;align-items:center">
+          <button class="btn ghost" type="button" onclick="goToStage(1)">← Back to Customer</button>
+          <button id="generateBillBtn" class="btn orange" type="button" style="padding:13px 26px;font-size:16px" onclick="handleGenerateBill()">
+            Generate & Review Bill →
+          </button>
+        </div>
+        <div id="orderEditorNotice" class="notice" hidden></div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- STAGE 3: Authoritative Bill Review & Invoice Presentation                 -->
+    <!-- ========================================================================= -->
+    <section id="stage3View" class="hidden" style="margin-top:0">
+      <div class="bill-print-card">
+        <!-- Bill Header with Brand Logo -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;border-bottom:2px solid var(--violet);padding-bottom:14px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor" class="bill-logo">
+            <div>
+              <h2 style="margin:0;font-family:Georgia,serif;color:var(--violet);font-size:24px">Jolly Ladies Tailor</h2>
+              <p class="muted" style="margin:2px 0 0 0;font-size:12px">Custom Ladies Tailoring & Alteration Specialist · Southern Avenue, Kolkata</p>
+              <p class="muted" style="margin:2px 0 0 0;font-size:12px">Phone / WhatsApp: <strong>+91 9748546778</strong></p>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <span class="eyebrow" style="color:var(--orange)">Official Bill</span>
+            <div id="billOrderNumber" style="font-size:18px;font-weight:700;color:var(--violet);margin-top:2px">JLT-...</div>
+            <div id="billOrderDate" class="muted" style="font-size:12px;margin-top:2px">Date: —</div>
+          </div>
+        </div>
+
+        <!-- Customer & Order Meta -->
+        <div style="background:#fdf8fc;border:1px solid #ebd3e8;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Customer Details</div>
+            <div id="billCustomerName" style="font-size:16px;font-weight:700;color:var(--violet);margin-top:2px">Customer Name</div>
+            <div id="billCustomerPhone" style="font-size:13px;color:var(--orange);margin-top:2px">📱 Phone</div>
+            <div id="billCustomerAddress" class="muted" style="font-size:12px;margin-top:2px"></div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">Delivery & Status</div>
+            <div style="margin-top:2px">Due: <strong id="billDueDate">Not specified</strong></div>
+            <div style="margin-top:4px">
+              <span id="billStatusBadge" class="status-badge status-NEW">New</span>
+              <span id="billPayStatusBadge" class="status-badge pay-PAYMENT_DUE">Payment Due</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Itemized Table -->
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Service / Garment</th>
+                <th>Rate</th>
+                <th>Qty</th>
+                <th>Line Total</th>
+              </tr>
+            </thead>
+            <tbody id="billItemsTableBody">
+              <tr><td colspan="4">Loading bill details...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Financial Summary -->
+        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+          <div style="width:280px;font-size:14px;line-height:1.9">
+            <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span id="billSubtotal">₹0.00</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Discount:</span><span id="billDiscount">-₹0.00</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;color:var(--violet);border-top:1.5px solid var(--violet);padding-top:4px">
+              <span>Total Payable:</span><span id="billTotal">₹0.00</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;color:var(--green)">
+              <span>Previously Paid:</span><span id="billPreviouslyPaid">₹0.00</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;color:#b30000;border-top:1px dashed #ccc;padding-top:4px">
+              <span>Outstanding Due:</span><span id="billOutstandingDue">₹0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bill Actions -->
+        <div class="form-actions" style="margin-top:24px;justify-content:space-between;align-items:center;border-top:1.5px solid var(--line);padding-top:16px">
+          <div style="display:flex;gap:8px">
+            <button id="editOrderItemsBtn" class="btn ghost" type="button" onclick="goToStage(2)">✏️ Edit Items</button>
+            <a id="downloadPdfFromBillBtn" class="btn light btn-sm" href="#" download>📄 Download PDF</a>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button id="skipToFinalizeBtn" class="btn ghost" type="button" onclick="skipPaymentToFinalize()">Finalize Without Advance →</button>
+            <button id="proceedToPaymentBtn" class="btn orange" type="button" style="padding:12px 22px;font-size:15px" onclick="goToStage(4)">
+              Choose Payment Method →
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- STAGE 4: Payment Method Selection & Real-Time Confirmation               -->
+    <!-- ========================================================================= -->
+    <section id="stage4View" class="hidden" style="margin-top:0">
+      <div class="stage-card" style="max-width:780px;margin:0 auto">
+        <div class="stage-header">
+          <div>
+            <div class="eyebrow" style="color:var(--orange)">Step 4 · Payment Collection</div>
+            <h3 class="stage-title">Choose Payment Method & Confirm</h3>
+            <p class="muted" style="margin:4px 0 0 0">Collect payment via verified UPI QR code or Cash, and confirm receipt in database.</p>
+          </div>
+          <button class="btn ghost btn-sm" type="button" onclick="goToStage(3)">← Back to Bill</button>
+        </div>
+
+        <!-- Financial Summary Banner -->
+        <div class="payment-calc-grid">
+          <div class="payment-calc-item">
+            <span>Bill Total</span>
+            <strong id="payGridTotal">₹0.00</strong>
+          </div>
+          <div class="payment-calc-item">
+            <span>Already Paid</span>
+            <strong id="payGridPaid" style="color:var(--green)">₹0.00</strong>
+          </div>
+          <div class="payment-calc-item">
+            <span>Paying Now</span>
+            <strong id="payGridPayingNow" style="color:var(--orange)">₹0.00</strong>
+          </div>
+          <div class="payment-calc-item">
+            <span>Due After Payment</span>
+            <strong id="payGridDueAfter" style="color:#b30000">₹0.00</strong>
+          </div>
+        </div>
+
+        <!-- Payment Method Selector -->
+        <label style="font-weight:700;font-size:14px;margin-bottom:6px;display:block">Select Payment Mode *</label>
+        <div class="payment-method-selector">
+          <div id="methodChoiceUpi" class="method-choice active" onclick="selectPaymentMethod('UPI')">
+            <div style="font-size:24px">📱</div>
+            <div style="margin-top:4px">Verified UPI / QR Code</div>
+            <small class="muted">GPay, PhonePe, Paytm</small>
+          </div>
+          <div id="methodChoiceCash" class="method-choice" onclick="selectPaymentMethod('CASH')">
+            <div style="font-size:24px">💵</div>
+            <div style="margin-top:4px">Cash</div>
+            <small class="muted">Cash in hand</small>
+          </div>
+        </div>
+
+        <!-- UPI QR Code Display Section (Visible when UPI chosen) -->
+        <div id="upiQrPanel" style="background:#fdf6fd;border:1.5px solid #ebd3e8;border-radius:14px;padding:20px;text-align:center;margin:18px 0">
+          <h4 id="tailorQrShopName" style="margin:0 0 4px 0;color:var(--violet)">Jolly Banerjee · Jolly Ladies Tailor</h4>
+          <p id="tailorQrUpiId" style="margin:0 0 10px 0;font-weight:700;color:var(--violet);font-size:15px">
+            UPI ID: <span id="upiIdText">jollybanerjee2021@oksbi</span>
+            <button class="btn ghost btn-sm" type="button" style="padding:2px 8px;font-size:11px;margin-left:6px" onclick="copyUpiId()">📋 Copy</button>
+          </p>
+
+          <img id="tailorGpayQrImg" src="/images/jolly-ladies-tailor-qr.jpg" alt="Jolly Banerjee GPay UPI QR" style="max-width:240px;width:100%;height:auto;border:1.5px solid #d9bcd7;border-radius:12px;padding:8px;background:#fff;margin:0 auto;display:block;box-shadow:0 4px 14px rgba(64,8,73,0.1)">
+
+          <div style="margin-top:12px">
+            <a id="tailorUpiIntentLink" href="#" class="btn light btn-sm" target="_blank" rel="noopener">🔗 Open Direct UPI Intent</a>
+          </div>
+
+          <div class="notice" style="margin-top:14px;font-size:13px;background:#fff5e6;color:#8f4a00;border:1px solid #ffd8a8;text-align:left">
+            ⚠️ <strong>Tailor Verification Rule:</strong><br>
+            1. Have the customer scan the QR code and authorize payment.<br>
+            2. <strong>Check your phone or soundbox</strong> to confirm funds have arrived.<br>
+            3. Only then click <strong>"Confirm Payment & Record"</strong> below.
+          </div>
+        </div>
+
+        <!-- Payment Amount Inputs -->
+        <div style="margin-top:18px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <label for="payNowInput" style="font-weight:700">Amount Received Today (₹) *</label>
+            <div style="display:flex;gap:6px">
+              <button id="quickPayFullBtn" class="btn light btn-sm" type="button" onclick="setPayAmountFull()">Full Balance (₹0.00)</button>
+              <button id="quickPayZeroBtn" class="btn ghost btn-sm" type="button" onclick="setPayAmountZero()">₹0 (Pay on Delivery)</button>
+            </div>
+          </div>
+          <input id="payNowInput" type="number" min="0" step="0.01" style="font-size:18px;font-weight:700;padding:12px" oninput="handlePayAmountChange()">
+        </div>
+
+        <div class="field" style="margin-top:14px">
+          <label for="paymentRefInput">Reference / Transaction ID / Cash Note</label>
+          <input id="paymentRefInput" placeholder="e.g. UPI Ref / Google Pay txn # or Cash in hand">
+        </div>
+
+        <div class="form-actions" style="margin-top:24px;justify-content:space-between;align-items:center">
+          <button class="btn ghost" type="button" onclick="goToStage(3)">← Back to Bill</button>
+          <div style="display:flex;gap:8px">
+            <button id="skipPaymentBtn" class="btn ghost" type="button" onclick="skipPaymentToFinalize()">Skip / Record Later</button>
+            <button id="confirmPaymentBtn" class="btn orange" type="button" style="padding:13px 26px;font-size:16px" onclick="handleConfirmPayment()">
+              Confirm Payment & Finalize →
+            </button>
+          </div>
+        </div>
+        <div id="paymentStageNotice" class="notice" hidden></div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- STAGE 5: Finalized Invoice & WhatsApp Delivery                            -->
+    <!-- ========================================================================= -->
+    <section id="stage5View" class="hidden" style="margin-top:0">
+      <div class="stage-card" style="max-width:780px;margin:0 auto">
+        <div style="text-align:center;padding-bottom:18px;border-bottom:1.5px solid var(--line)">
+          <div style="font-size:42px">🎉</div>
+          <h2 style="font-family:Georgia,serif;color:var(--violet);margin:4px 0">Bill Finalized & Saved</h2>
+          <p class="muted" style="margin:4px 0 10px 0">The order is permanently recorded in the database. Share the bill with your customer now.</p>
+          <div style="display:inline-flex;gap:8px">
+            <span id="finalOrderNumberPill" class="pill" style="font-size:13px;font-weight:800">JLT-...</span>
+            <span id="finalPayStatusPill" class="status-badge pay-PAID">Fully Paid</span>
+          </div>
+        </div>
+
+        <!-- Final Figures Card -->
+        <div class="payment-calc-grid" style="margin-top:18px">
+          <div class="payment-calc-item">
+            <span>Customer</span>
+            <strong id="finalCustomerName" style="font-size:15px">—</strong>
+          </div>
+          <div class="payment-calc-item">
+            <span>Bill Total</span>
+            <strong id="finalTotal">₹0.00</strong>
+          </div>
+          <div class="payment-calc-item">
+            <span>Paid</span>
+            <strong id="finalPaid" style="color:var(--green)">₹0.00</strong>
+          </div>
+          <div class="payment-calc-item">
+            <span>Remaining Due</span>
+            <strong id="finalDue" style="color:#b30000">₹0.00</strong>
+          </div>
+        </div>
+
+        <!-- Customer Account Balance Statement (if previous balance exists) -->
+        <div id="finalCustomerDebtBreakdown" class="hidden" style="background:#fff7f9;border:1.5px solid #e7b0de;border-radius:12px;padding:12px 16px;margin-top:14px">
+          <div style="font-weight:700;color:var(--violet);font-size:13px;margin-bottom:6px">Customer Account Reconciliation</div>
+          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;font-size:13px">
+            <div><span class="muted">This Bill Due:</span> <strong id="finalCurrentDue">₹0.00</strong></div>
+            <div><span class="muted">Previous Orders Balance:</span> <strong id="finalPrevDue" style="color:var(--orange)">₹0.00</strong></div>
+            <div><span class="muted">Total Customer Balance:</span> <strong id="finalOverallDue" style="color:#b30000">₹0.00</strong></div>
+          </div>
+          <p class="muted" style="margin:6px 0 0 0;font-size:11px">* Previous balance is shown for customer statement reconciliation and is kept separate from this bill's total.</p>
+        </div>
+
+        <!-- WhatsApp Sharing Box -->
+        <div style="margin-top:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <h4 style="margin:0;color:var(--violet);display:flex;align-items:center;gap:6px">
+              <span style="color:#25D366;font-size:20px">💬</span> Share Digital e-Bill on WhatsApp
+            </h4>
+            <span class="pill" style="background:#e8f8ee;color:#18643d">Direct to Customer</span>
+          </div>
+
+          <div class="whatsapp-preview-box">
+            <div id="whatsappPreviewBubble" class="whatsapp-bubble">
+              Loading WhatsApp message preview...
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button id="shareWhatsAppBtn" class="btn orange" type="button" style="background:#25D366;border-color:#25D366;flex:1;font-size:15px;padding:12px 18px" onclick="executeWhatsAppShare()">
+              💬 Share Bill on WhatsApp
+            </button>
+            <button id="copyMessageBtn" class="btn ghost" type="button" onclick="copyWhatsAppMessage()">
+              📋 Copy Message
+            </button>
+          </div>
+          <p class="muted" style="margin:8px 0 0 0;font-size:12px;text-align:center">
+            Opens WhatsApp Web on desktop or WhatsApp app on mobile. To attach the PDF file, download it below first.
+          </p>
+        </div>
+
+        <!-- Secondary Actions: PDF Download, Print, Next Order -->
+        <div style="margin-top:24px;padding-top:18px;border-top:1.5px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center">
+          <div style="display:flex;gap:8px">
+            <a id="downloadFinalPdfBtn" class="btn light btn-sm" href="#" download>📄 Download PDF Invoice</a>
+            <button class="btn ghost btn-sm" type="button" onclick="printFinalOrderInvoice()">🖨️ Print Invoice</button>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn light" type="button" onclick="goToStage(2);startNewOrder()">✂️ Another Order for Customer</button>
+            <button class="btn orange" type="button" onclick="startFreshNextCustomer()">＋ Next Customer</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- RECENT SHOP-WIDE ORDERS (Always visible below for quick tailor shop view) -->
+    <!-- ========================================================================= -->
+    <section class="panel section" style="margin-top:30px">
+      <div class="toolbar">
+        <div>
+          <h3 style="margin:0;color:var(--violet)">Recent Shop-Wide Orders</h3>
+          <p class="muted" style="margin:4px 0 0 0">Latest orders across all shop customers.</p>
+        </div>
+        <button id="refreshRecentShopOrdersBtn" class="btn ghost btn-sm" type="button" onclick="loadRecentShopOrders()">🔄 Refresh List</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Bill #</th>
+              <th>Customer</th>
+              <th>Status</th>
+              <th>Payment</th>
+              <th>Total</th>
+              <th>Paid</th>
+              <th>Due</th>
+              <th>Delivery Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="recentShopOrdersRows">
+            <tr><td colspan="9">Loading shop orders...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  Keep customer measurements and personal data private. Only authorized staff should access this workspace.
+</footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/tailor.js"></script>
+</body>
+</html>

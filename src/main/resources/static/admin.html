@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Console | Jolly Ladies Tailor</title>
+  <link rel="icon" type="image/png" href="/images/jolly-ladies-tailor-logo.png">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Logo" class="brand-logo">
+    <div>
+      <h1>Admin Console</h1>
+      <small>JOLLY LADIES TAILOR</small>
+    </div>
+  </a>
+  <nav class="navlinks">
+    <a href="/">Consumer Website</a>
+    <a href="/tailor.html">Tailor Workspace</a>
+    <button id="logout" class="hidden" type="button">Log out</button>
+  </nav>
+</header>
+
+<main>
+  <!-- Login Panel -->
+  <section id="loginPanel" class="panel login-wrap" style="text-align:center">
+    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Sewing Machine Logo" class="brand-logo-lg">
+    <div class="eyebrow">Owner access</div>
+    <h2>Admin login</h2>
+    <p class="muted">Manage business analytics, staff, services, customers, payments, and shop settings.</p>
+    <form id="loginForm" style="text-align:left">
+      <div class="field">
+        <label for="username">Admin Username</label>
+        <input id="username" required autocomplete="username">
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label for="password">Admin Password</label>
+        <input id="password" type="password" required autocomplete="current-password">
+      </div>
+      <div class="form-actions">
+        <button class="btn orange" type="submit">Sign in to Admin</button>
+      </div>
+      <div id="loginNotice" class="notice" hidden></div>
+    </form>
+  </section>
+
+  <!-- Admin Application -->
+  <div id="adminApp" class="hidden">
+    <!-- Dashboard Header -->
+    <div class="toolbar">
+      <div>
+        <div class="eyebrow">Business overview</div>
+        <h2 style="font:700 32px Georgia,serif;color:var(--violet);margin:4px 0">Admin Dashboard</h2>
+        <p class="muted">Live operational metrics and reporting calculated directly from PostgreSQL.</p>
+      </div>
+      <div class="field" style="max-width:200px">
+        <label for="range">Reporting Period</label>
+        <select id="range">
+          <option value="today">Today</option>
+          <option value="7d">Last 7 days</option>
+          <option value="month" selected>This month</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="statsNotice" class="notice" hidden></div>
+
+    <!-- KPI Metric Cards -->
+    <div class="stats">
+      <div class="stat">
+        <span>Sales Billed</span>
+        <strong id="statBilled">₹0.00</strong>
+      </div>
+      <div class="stat">
+        <span>Payments Received</span>
+        <strong id="statCollected">₹0.00</strong>
+      </div>
+      <div class="stat">
+        <span>Outstanding Balance</span>
+        <strong id="statDue" style="color:var(--orange)">₹0.00</strong>
+      </div>
+      <div class="stat">
+        <span>Total Orders</span>
+        <strong id="statOrders">0</strong>
+      </div>
+      <div class="stat">
+        <span>Total Customers</span>
+        <strong id="statCustomers">0</strong>
+      </div>
+      <div class="stat">
+        <span>Active Services</span>
+        <strong id="statProducts">0</strong>
+      </div>
+      <div class="stat">
+        <span>New Enquiries</span>
+        <strong id="statRequests">0</strong>
+      </div>
+      <div class="stat">
+        <span>Average Order Value</span>
+        <strong id="statAverage">₹0.00</strong>
+      </div>
+    </div>
+
+    <!-- Sales Chart & Excel Export Action -->
+    <section class="panel section">
+      <div class="toolbar">
+        <h2 style="margin:0">Sales Trend — Last 7 Days</h2>
+        <div class="form-actions" style="margin:0">
+          <a class="btn orange" href="/api/admin/reports/export-excel" download="jolly-ladies-tailor-data.xlsx" id="downloadAllDataBtn">⬇ Download All Data (.xlsx)</a>
+        </div>
+      </div>
+      <div id="salesChart" style="display:grid;gap:10px;margin-top:12px"></div>
+    </section>
+
+    <!-- Top Services & Payment Breakdown -->
+    <div class="layout section">
+      <section class="panel">
+        <h2>Top Stitching Services</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Service Name</th>
+                <th>Quantity</th>
+                <th>Revenue</th>
+              </tr>
+            </thead>
+            <tbody id="topServicesRows">
+              <tr><td colspan="3">Loading services...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Collections by Payment Method</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Payment Method</th>
+                <th>Transactions</th>
+                <th>Total Collected</th>
+              </tr>
+            </thead>
+            <tbody id="paymentMethodsRows">
+              <tr><td colspan="3">Loading methods...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- Recent Shop Orders -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Recent Shop Orders</h2>
+          <p class="muted">Latest orders placed across all tailoring customers. Inspect invoices and customer measurements.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Bill No.</th>
+              <th>Customer</th>
+              <th>Status</th>
+              <th>Payment Status</th>
+              <th>Total</th>
+              <th>Paid</th>
+              <th>Due</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="adminRecentOrdersRows">
+            <tr><td colspan="8">Loading recent orders...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Customer Search and Order History -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Customer Directory & Order History</h2>
+          <p class="muted">Search customer records, lifetime billing, and order histories.</p>
+        </div>
+        <div class="field" style="min-width:280px">
+          <input id="adminCustomerSearch" placeholder="Search customer by name or phone...">
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Customer Name</th>
+              <th>Phone</th>
+              <th>Total Orders</th>
+              <th>Total Spent</th>
+              <th>Total Due</th>
+              <th>Last Order</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="adminCustomersRows">
+            <tr><td colspan="7">Loading customer directory...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Customer Order History Detail Box -->
+      <div id="adminCustomerOrdersDetail" class="panel hidden" style="margin-top:16px;background:#fff8fd;border:1px solid var(--pink)">
+        <div class="toolbar">
+          <h3 id="adminCustomerDetailTitle" style="margin:0;color:var(--violet)">Customer Order History</h3>
+          <button id="closeCustomerOrders" class="btn ghost" type="button">Close</button>
+        </div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead>
+              <tr>
+                <th>Bill No.</th>
+                <th>Status</th>
+                <th>Payment Status</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Due</th>
+                <th>Promised Delivery</th>
+                <th>Date</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="adminCustomerOrdersRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Payment History / Ledger Log -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Payment Ledger & Transactions</h2>
+          <p class="muted">All verified payments and refunds recorded across tailor sessions.</p>
+        </div>
+        <div class="field" style="min-width:260px">
+          <input id="adminPaymentSearch" placeholder="Search by bill, customer, or UPI ref...">
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Bill No.</th>
+              <th>Customer</th>
+              <th>Amount</th>
+              <th>Type</th>
+              <th>Method</th>
+              <th>Reference / Note</th>
+              <th>Received By</th>
+            </tr>
+          </thead>
+          <tbody id="adminPaymentsRows">
+            <tr><td colspan="8">Loading transactions...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Shop Settings & GPay QR -->
+    <section class="panel section">
+      <h2>Shop Details & GPay QR Code</h2>
+      <p class="muted">Update shop information, contact details, and the Google Pay QR code for customer scan.</p>
+      <form id="shopSettingsForm">
+        <div class="grid">
+          <div class="field">
+            <label for="shopName">Shop Name</label>
+            <input id="shopName" required maxlength="160">
+          </div>
+          <div class="field">
+            <label for="shopPhone">Phone Number</label>
+            <input id="shopPhone" maxlength="30" placeholder="+91 98300 XXXXX">
+          </div>
+          <div class="field full">
+            <label for="shopAddress">Shop Address & Directions</label>
+            <textarea id="shopAddress" rows="2" maxlength="1000" placeholder="Shop address, market location, Kolkata"></textarea>
+          </div>
+          <div class="field">
+            <label for="shopWhatsapp">WhatsApp Number (e.g. 919830012345)</label>
+            <input id="shopWhatsapp" maxlength="30" placeholder="91XXXXXXXXXX">
+          </div>
+          <div class="field">
+            <label for="shopAdminPhone">Admin Notification Phone (WhatsApp)</label>
+            <input id="shopAdminPhone" maxlength="30" placeholder="e.g. 919830099999">
+          </div>
+          <div class="field">
+            <label for="shopUpi">UPI Payment ID</label>
+            <input id="shopUpi" maxlength="120" placeholder="jollytailor@okaxis">
+          </div>
+          <div class="field full">
+            <label for="shopQr">GPay / PhonePe / UPI QR Image</label>
+            <input id="shopQr" type="file" accept="image/png,image/jpeg,image/webp">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn orange" type="submit">Save Shop Details</button>
+          <button id="uploadShopQr" class="btn ghost" type="button">Upload GPay QR</button>
+        </div>
+        <div id="shopNotice" class="notice" hidden></div>
+        <img id="shopQrPreview" class="hidden" alt="GPay QR preview" style="max-width:200px;margin-top:12px;border:1px solid var(--line);padding:8px;border-radius:10px;background:#fff">
+      </form>
+    </section>
+
+    <!-- Services & Pricing Management (Spacious Full-Width UX) -->
+    <section class="panel section" id="servicesPricingSection">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Services & Pricing Management</h2>
+          <p class="muted">Configure custom stitching services, ready-made garments, default pricing, and inventory stock.</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="refreshProducts" class="btn ghost btn-sm" type="button">🔄 Refresh Services</button>
+        </div>
+      </div>
+
+      <!-- Add / Edit Service Form -->
+      <div style="background:#fdf8fc;border:1.5px solid #ebd3e8;border-radius:14px;padding:20px;margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 id="productFormTitle" style="margin:0;color:var(--violet)">＋ Add New Service / Garment</h3>
+          <button id="cancelProductEditBtn" class="btn ghost btn-sm hidden" type="button" onclick="cancelProductEdit()">✕ Cancel Edit</button>
+        </div>
+        <form id="productForm">
+          <input type="hidden" id="pEditingId" value="">
+          <div class="grid">
+            <div class="field">
+              <label for="pName">Service / Garment Name *</label>
+              <input id="pName" required maxlength="140" placeholder="e.g. Bridal Blouse, Anarkali, Ready-made Kurti">
+            </div>
+            <div class="field">
+              <label for="pCategory">Category</label>
+              <select id="pCategory"></select>
+            </div>
+            <div class="field">
+              <label for="pType">Item Classification</label>
+              <select id="pType" onchange="toggleStockField()">
+                <option value="SERVICE">Service (Custom Tailoring / Stitching)</option>
+                <option value="READY_MADE">Ready-Made Stock Garment</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="pRate">Default Unit Rate (₹) *</label>
+              <input id="pRate" type="number" min="0" step="0.01" value="0" required>
+            </div>
+            <div class="field" id="pStockWrap" style="opacity:0.5">
+              <label for="pStock">Inventory Stock Quantity <span class="muted">(Ready-Made only)</span></label>
+              <input id="pStock" type="number" min="0" value="0" disabled>
+            </div>
+            <div class="field">
+              <label for="pDescription">Description / Notes</label>
+              <input id="pDescription" maxlength="500" placeholder="Lining details, fabric specifications, trial requirements">
+            </div>
+          </div>
+          <div class="form-actions" style="margin-top:14px">
+            <button id="saveProductBtn" class="btn orange" type="submit">Add Service / Garment</button>
+          </div>
+          <div id="productNotice" class="notice" hidden></div>
+        </form>
+      </div>
+
+      <!-- Services List Table -->
+      <div class="toolbar" style="margin-bottom:10px">
+        <h3 style="margin:0;color:var(--violet)">Configured Garment Catalog (<span id="productCountBadge">0</span>)</h3>
+        <div class="field" style="min-width:240px">
+          <input id="productSearchInput" placeholder="Filter services by name..." oninput="filterProductsTable()">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Item Name</th>
+              <th>Type</th>
+              <th>Category</th>
+              <th>Default Rate</th>
+              <th>Stock</th>
+              <th>Status</th>
+              <th>Photo</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="productsRows">
+            <tr><td colspan="8">Loading services...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Garment Categories Panel -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Garment Categories</h2>
+          <p class="muted">Categories organize customer stitching services and catalog browsing.</p>
+        </div>
+      </div>
+      <div class="layout" style="align-items:start">
+        <form id="categoryForm" style="background:#fdf8fc;border:1.5px solid #ebd3e8;border-radius:14px;padding:18px">
+          <h3 style="margin:0 0 10px;color:var(--violet)">＋ Add Garment Category</h3>
+          <div class="field">
+            <label for="categoryName">Category Name *</label>
+            <input id="categoryName" required maxlength="100" placeholder="e.g. Stitching, Alteration, Finishing">
+          </div>
+          <div class="field" style="margin-top:10px">
+            <label for="categoryDescription">Description</label>
+            <input id="categoryDescription" maxlength="500" placeholder="Garment stitching services">
+          </div>
+          <div class="form-actions">
+            <button class="btn" type="submit">Add Category</button>
+          </div>
+          <div id="categoryNotice" class="notice" hidden></div>
+        </form>
+        <div>
+          <h3 style="margin:0 0 10px;color:var(--violet)">Existing Categories</h3>
+          <div id="categoriesList" style="display:grid;gap:8px"></div>
+          <div class="divider-title" style="margin-top:16px">Supabase Storage Configuration</div>
+          <p class="muted" style="margin:6px 0 0">Catalog images are uploaded securely to Supabase Storage via backend S3 credentials. Only public product photos and the public QR code should be uploaded.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Price Overrides & Adjustments Audit -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Tailor Price Adjustments Audit</h2>
+          <p class="muted">Review all order line items where tailor modified the default admin price.</p>
+        </div>
+        <button id="refreshAdjustments" class="btn ghost" type="button">Refresh Adjustments</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Bill #</th>
+              <th>Customer</th>
+              <th>Item Name</th>
+              <th>Default Rate</th>
+              <th>Agreed Rate</th>
+              <th>Difference</th>
+              <th>Adjustment Reason</th>
+              <th>Tailor</th>
+            </tr>
+          </thead>
+          <tbody id="adjustmentsRows">
+            <tr><td colspan="9">Loading price adjustments...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Consumer Enquiries -->
+    <section class="panel section">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Consumer Website Enquiries</h2>
+          <p class="muted">Requests submitted by visitors on the public homepage.</p>
+        </div>
+        <button id="refreshRequests" class="btn ghost" type="button">Refresh Enquiries</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Customer Name</th>
+              <th>Phone</th>
+              <th>Email</th>
+              <th>Requested Service</th>
+              <th>Message</th>
+              <th>Received Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="requestsRows">
+            <tr><td colspan="7">Loading enquiries...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Staff Management & Security Controls -->
+    <section class="panel section" id="staffSection">
+      <div class="toolbar">
+        <div>
+          <h2 style="margin:0">Staff Management & Access Roles</h2>
+          <p class="muted">Manage shop employee logins for Tailor workspace and Admin console. Passwords must be at least 12 characters.</p>
+        </div>
+        <button id="toggleAddStaffBtn" class="btn orange btn-sm" type="button" onclick="toggleAddStaffCard()">＋ Add Staff Member</button>
+      </div>
+
+      <!-- Add Staff Form Card (Collapsible) -->
+      <div id="addStaffCard" class="hidden" style="background:#fdf8fc;border:1.5px solid #ebd3e8;border-radius:14px;padding:20px;margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 style="margin:0;color:var(--violet)">Register New Staff Member</h3>
+          <button class="btn ghost btn-sm" type="button" onclick="toggleAddStaffCard()">✕ Cancel</button>
+        </div>
+        <form id="userForm">
+          <div class="grid">
+            <div class="field">
+              <label for="uFullName">Full Name *</label>
+              <input id="uFullName" required maxlength="160" placeholder="e.g. Jolly Banerjee, Master Tailor 1">
+            </div>
+            <div class="field">
+              <label for="uName">Staff Username *</label>
+              <input id="uName" required maxlength="80" autocomplete="off" placeholder="e.g. tailor1, admin_jolly">
+            </div>
+            <div class="field">
+              <label for="uRole">Access Role *</label>
+              <select id="uRole">
+                <option value="TAILOR">TAILOR (Customer measurements, orders & billing)</option>
+                <option value="ADMIN">ADMIN (Full Console, pricing & user management)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="uPassword">Temporary Password (minimum 12 characters) *</label>
+              <input id="uPassword" type="password" minlength="12" required autocomplete="new-password" placeholder="At least 12 characters">
+            </div>
+          </div>
+          <div class="form-actions" style="margin-top:14px">
+            <button class="btn orange" type="submit">Create Staff Account</button>
+          </div>
+          <div id="userNotice" class="notice" hidden></div>
+        </form>
+      </div>
+
+      <!-- Staff Directory Table -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Full Name</th>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Created Date</th>
+              <th>Last Login</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="staffDirectoryRows">
+            <tr><td colspan="7">Loading staff directory...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PostgreSQL Backup Procedures -->
+    <section class="panel section">
+      <h2>PostgreSQL Database Backup & Recovery Procedure</h2>
+      <p class="muted">Regular database backups ensure customer measurements and billing records are never lost.</p>
+      <div style="background:#f9f5fa;padding:16px;border-radius:10px;font-family:monospace;font-size:13px;line-height:1.6">
+        <strong>1. Create Encrypted/Compressed PostgreSQL Backup:</strong><br>
+        <code>pg_dump -h localhost -p 5432 -U jolly_app -d jolly_tailor -F c -b -v -f "jolly_tailor_backup_%date:~-4,4%%date:~-7,2%%date:~-10,2%.dump"</code><br><br>
+        <strong>2. Restore PostgreSQL Backup:</strong><br>
+        <code>pg_restore -h localhost -p 5432 -U jolly_app -d jolly_tailor -v -c "jolly_tailor_backup.dump"</code><br><br>
+        <strong>3. Docker Local Backup Command:</strong><br>
+        <code>docker compose exec -T postgres pg_dump -U jolly_app -d jolly_tailor &gt; backup.sql</code>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  Admin actions affect the shared PostgreSQL database. Use strong passwords and keep routine backups.
+</footer>
+
+<!-- Admin Order Measurement Snapshot Modal -->
+<div id="adminMeasurementModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div>
+        <div class="eyebrow" style="color:var(--orange)">Order Measurement Snapshot</div>
+        <h3 id="adminMeasureModalTitle" class="modal-title">Garment Measurements</h3>
+        <p id="adminMeasureModalSubtitle" class="muted" style="margin:2px 0 0"></p>
+      </div>
+      <button id="closeAdminMeasureModal" class="btn ghost btn-sm" type="button" onclick="closeAdminMeasureModal()">✕ Close</button>
+    </div>
+
+    <div id="adminMeasureModalContent">
+      <!-- Filled dynamically -->
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:14px;border-top:1.5px solid var(--line)">
+      <button id="printAdminMeasureBtn" class="btn light btn-sm" type="button" onclick="printAdminMeasurement()">🖨️ Print Measurements</button>
+      <button class="btn ghost btn-sm" type="button" onclick="closeAdminMeasureModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Staff Account Modal -->
+<div id="editStaffModal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <div>
+        <h3 class="modal-title">Edit Staff Account</h3>
+        <p id="editStaffModalSubtitle" class="muted" style="margin:2px 0 0"></p>
+      </div>
+      <button class="btn ghost btn-sm" type="button" onclick="closeEditStaffModal()">✕ Close</button>
+    </div>
+    <form id="editStaffForm" onsubmit="handleSaveEditStaff(event)">
+      <input type="hidden" id="editStaffId" value="">
+      <div class="field" style="margin-bottom:12px">
+        <label for="editStaffFullName">Full Name *</label>
+        <input id="editStaffFullName" required maxlength="160">
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="editStaffRole">Access Role</label>
+        <select id="editStaffRole">
+          <option value="TAILOR">TAILOR (Customer measurements, orders & billing)</option>
+          <option value="ADMIN">ADMIN (Full Console Access)</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:700;cursor:pointer">
+          <input type="checkbox" id="editStaffActive" style="width:auto">
+          Account Active (Permitted to sign in)
+        </label>
+      </div>
+      <div class="form-actions" style="margin-top:18px">
+        <button class="btn orange" type="submit">Save Changes</button>
+        <button class="btn ghost" type="button" onclick="closeEditStaffModal()">Cancel</button>
+      </div>
+      <div id="editStaffNotice" class="notice" hidden></div>
+    </form>
+  </div>
+</div>
+
+<!-- Reset Staff Password Modal -->
+<div id="resetStaffPwModal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:480px">
+    <div class="modal-header">
+      <div>
+        <h3 class="modal-title">Reset Staff Password</h3>
+        <p id="resetStaffPwSubtitle" class="muted" style="margin:2px 0 0"></p>
+      </div>
+      <button class="btn ghost btn-sm" type="button" onclick="closeResetStaffPwModal()">✕ Close</button>
+    </div>
+    <form id="resetStaffPwForm" onsubmit="handleSaveResetStaffPw(event)">
+      <input type="hidden" id="resetStaffPwId" value="">
+      <div class="field" style="margin-bottom:12px">
+        <label for="newStaffPassword">New Password (minimum 12 characters) *</label>
+        <input id="newStaffPassword" type="password" minlength="12" required autocomplete="new-password" placeholder="At least 12 characters">
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="confirmStaffPassword">Confirm New Password *</label>
+        <input id="confirmStaffPassword" type="password" minlength="12" required autocomplete="new-password" placeholder="Retype new password">
+      </div>
+      <div class="form-actions" style="margin-top:18px">
+        <button class="btn orange" type="submit">Update Password</button>
+        <button class="btn ghost" type="button" onclick="closeResetStaffPwModal()">Cancel</button>
+      </div>
+      <div id="resetStaffPwNotice" class="notice" hidden></div>
+    </form>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>
