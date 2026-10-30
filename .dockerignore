@@ -1,0 +1,13 @@
+.git/
+.gitignore
+.env
+.env.*
+data/
+target/
+powershell*
+*.cmd
+*.bat
+*.exe
+*.log
+*.tmp
+*.md
