@@ -827,9 +827,13 @@ public class TailorController {
     }
 
     private long currentUserId(Authentication a) {
-        if (a == null) return 0;
-        Long id = jdbc.queryForObject("SELECT id FROM app_users WHERE username=?", Long.class, a.getName());
-        return id == null ? 0 : id;
+        if (a == null || a.getName() == null || a.getName().isBlank()) return 0;
+        try {
+            var list = jdbc.queryForList("SELECT id FROM app_users WHERE username=?", Long.class, a.getName());
+            return list.isEmpty() ? 0 : list.get(0);
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private String text(Map<String,Object> b, String k) {

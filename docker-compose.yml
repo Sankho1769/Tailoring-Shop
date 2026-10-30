@@ -20,6 +20,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: prod
       PORT: 8080
       DB_URL: jdbc:postgresql://postgres:5432/jolly_tailor
       DB_USERNAME: jolly_app

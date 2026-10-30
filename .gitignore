@@ -1,12 +1,36 @@
+# Environment and secrets
 .env
+.env.*
+
+# Build artifacts
 target/
+
+# IDE and Editor configurations
 .idea/
 .vscode/
 *.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+
+# OS generated files
 .DS_Store
+Thumbs.db
+
+# Logs and temporary execution dumps
 *.log
+*.tmp
+*.dump
+*.dumpstream
+
+# Local development H2 database files (Never commit database files)
 data/
 *.mv.db
 *.trace.db
-powershell.exe
 
+# Accidental binary artifacts and local wrappers
+powershell.exe
+powershell_to_delete.tmp
+powershell.cmd
