@@ -29,6 +29,14 @@ class AuthenticationAndSessionIntegrationTest {
     @Autowired private ObjectMapper mapper;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private PasswordEncoder encoder;
+    @Autowired private com.jollytailor.controller.AuthController authController;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        if (authController != null) {
+            authController.resetRateLimits();
+        }
+    }
 
     @Test
     @DisplayName("CSRF endpoint returns valid token and header name")
@@ -206,6 +214,109 @@ class AuthenticationAndSessionIntegrationTest {
         // 3. Confirm session is invalidated and /api/auth/me returns 401
         mockMvc.perform(get("/api/auth/me").session(session))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Remember Me login creates persistent 30-day session and persistent HttpOnly cookie")
+    void testRememberMePersistentSessionAndCookie() throws Exception {
+        Map<String, Object> credentials = Map.of(
+                "username", "testadmin",
+                "password", "TestAdminPassword123!",
+                "rememberMe", true
+        );
+
+        MvcResult result = mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(credentials)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username", is("testadmin")))
+                .andExpect(jsonPath("$.remembered", is(true)))
+                .andReturn();
+
+        MockHttpSession session = (MockHttpSession) result.getRequest().getSession(false);
+        org.junit.jupiter.api.Assertions.assertNotNull(session, "Session must exist");
+        // Verify persistent session timeout (30 days = 2,592,000 seconds)
+        org.junit.jupiter.api.Assertions.assertEquals(2592000, session.getMaxInactiveInterval(),
+                "Session maxInactiveInterval must be set to 30 days when rememberMe is true");
+
+        // Verify Set-Cookie header for JSESSIONID
+        jakarta.servlet.http.Cookie sessionCookie = result.getResponse().getCookie("JSESSIONID");
+        org.junit.jupiter.api.Assertions.assertNotNull(sessionCookie, "JSESSIONID cookie must be present in response");
+        org.junit.jupiter.api.Assertions.assertTrue(sessionCookie.isHttpOnly(), "Cookie must be HttpOnly");
+        org.junit.jupiter.api.Assertions.assertEquals(2592000, sessionCookie.getMaxAge(),
+                "JSESSIONID cookie Max-Age must be set to 30 days");
+
+        // Verify /api/auth/me reports remembered = true
+        mockMvc.perform(get("/api/auth/me").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username", is("testadmin")))
+                .andExpect(jsonPath("$.remembered", is(true)));
+    }
+
+    @Test
+    @DisplayName("Non-remembered login creates standard shorter 30-minute session and browser session cookie")
+    void testNonRememberedShorterSession() throws Exception {
+        Map<String, Object> credentials = Map.of(
+                "username", "testtailor",
+                "password", "TestTailorPassword123!",
+                "rememberMe", false
+        );
+
+        MvcResult result = mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(credentials)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username", is("testtailor")))
+                .andExpect(jsonPath("$.remembered", is(false)))
+                .andReturn();
+
+        MockHttpSession session = (MockHttpSession) result.getRequest().getSession(false);
+        org.junit.jupiter.api.Assertions.assertNotNull(session, "Session must exist");
+        // Verify standard session timeout (30 minutes = 1,800 seconds)
+        org.junit.jupiter.api.Assertions.assertEquals(1800, session.getMaxInactiveInterval(),
+                "Session maxInactiveInterval must be set to 30 minutes when rememberMe is false");
+
+        jakarta.servlet.http.Cookie sessionCookie = result.getResponse().getCookie("JSESSIONID");
+        org.junit.jupiter.api.Assertions.assertNotNull(sessionCookie);
+        org.junit.jupiter.api.Assertions.assertTrue(sessionCookie.isHttpOnly(), "Cookie must be HttpOnly");
+        org.junit.jupiter.api.Assertions.assertEquals(-1, sessionCookie.getMaxAge(),
+                "Cookie Max-Age must be -1 (browser session cookie) when rememberMe is false");
+
+        // Verify /api/auth/me reports remembered = false
+        mockMvc.perform(get("/api/auth/me").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username", is("testtailor")))
+                .andExpect(jsonPath("$.remembered", is(false)));
+    }
+
+    @Test
+    @DisplayName("Logout clears persistent session cookie with Max-Age 0")
+    void testLogoutClearsCookieHeader() throws Exception {
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "username", "testadmin",
+                                "password", "TestAdminPassword123!",
+                                "rememberMe", true
+                        ))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        MockHttpSession session = (MockHttpSession) loginResult.getRequest().getSession(false);
+
+        MvcResult logoutResult = mockMvc.perform(post("/api/auth/logout")
+                        .with(csrf())
+                        .session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("Logged out")))
+                .andReturn();
+
+        jakarta.servlet.http.Cookie clearedCookie = logoutResult.getResponse().getCookie("JSESSIONID");
+        org.junit.jupiter.api.Assertions.assertNotNull(clearedCookie, "Logout must send clearing cookie");
+        org.junit.jupiter.api.Assertions.assertEquals(0, clearedCookie.getMaxAge(), "Cleared cookie Max-Age must be 0");
     }
 
     @Test

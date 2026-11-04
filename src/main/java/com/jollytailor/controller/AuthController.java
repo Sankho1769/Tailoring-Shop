@@ -34,6 +34,10 @@ public class AuthController {
         this.jdbc = jdbc;
     }
 
+    public void resetRateLimits() {
+        loginAttemptTimestamps.clear();
+    }
+
     private void checkLoginRateLimit(HttpServletRequest request) {
         if (request == null) return;
         String ip = request.getHeader("X-Forwarded-For");
@@ -65,13 +69,21 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public Map<String,Object> login(@RequestBody(required = false) Map<String,String> body, HttpServletRequest request, HttpServletResponse response) {
+    public Map<String,Object> login(@RequestBody(required = false) Map<String,Object> body, HttpServletRequest request, HttpServletResponse response) {
         checkLoginRateLimit(request);
-        String username = body != null ? body.getOrDefault("username", "").trim() : "";
-        String password = body != null ? body.getOrDefault("password", "") : "";
+        String username = body != null && body.get("username") != null ? body.get("username").toString().trim() : "";
+        String password = body != null && body.get("password") != null ? body.get("password").toString() : "";
         if (username.isBlank() || password.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username and password are required");
         }
+
+        boolean rememberMe = false;
+        if (body != null) {
+            Object rm = body.get("rememberMe");
+            if (rm == null) rm = body.get("remember_me");
+            rememberMe = rm != null && ("true".equalsIgnoreCase(rm.toString()) || Boolean.TRUE.equals(rm));
+        }
+
         try {
             Authentication auth = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
             HttpSession previous = request.getSession(false);
@@ -82,6 +94,36 @@ public class AuthController {
             context.setAuthentication(auth);
             SecurityContextHolder.setContext(context);
             securityContextRepository.saveContext(context, request, response);
+
+            // Server-side session inactivity configuration & client cookie persistence
+            HttpSession session = request.getSession(true);
+            boolean secure = isSecureRequest(request);
+            if (rememberMe) {
+                // Persistent session: 30 days (2,592,000 seconds)
+                int persistentSeconds = 30 * 24 * 3600;
+                session.setMaxInactiveInterval(persistentSeconds);
+                session.setAttribute("REMEMBERED", true);
+
+                jakarta.servlet.http.Cookie cookie = new jakarta.servlet.http.Cookie("JSESSIONID", session.getId());
+                cookie.setPath("/");
+                cookie.setHttpOnly(true);
+                cookie.setMaxAge(persistentSeconds);
+                if (secure) cookie.setSecure(true);
+                cookie.setAttribute("SameSite", "Lax");
+                response.addCookie(cookie);
+            } else {
+                // Standard session: 30 minutes (1,800 seconds) session cookie
+                session.setMaxInactiveInterval(1800);
+                session.setAttribute("REMEMBERED", false);
+
+                jakarta.servlet.http.Cookie cookie = new jakarta.servlet.http.Cookie("JSESSIONID", session.getId());
+                cookie.setPath("/");
+                cookie.setHttpOnly(true);
+                cookie.setMaxAge(-1); // Browser session cookie
+                if (secure) cookie.setSecure(true);
+                cookie.setAttribute("SameSite", "Lax");
+                response.addCookie(cookie);
+            }
 
             try {
                 jdbc.update("UPDATE app_users SET last_login_at=NOW() WHERE username=?", auth.getName());
@@ -94,7 +136,7 @@ public class AuthController {
                 if (fn != null && !fn.isBlank()) fullName = fn;
             } catch (Exception ignored) {}
 
-            return Map.of("username", auth.getName(), "role", role, "fullName", fullName);
+            return Map.of("username", auth.getName(), "role", role, "fullName", fullName, "remembered", rememberMe);
         } catch (DisabledException ex) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is inactive. Please contact the administrator.");
         } catch (org.springframework.security.core.AuthenticationException ex) {
@@ -103,7 +145,7 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public Map<String,Object> me(Authentication auth) {
+    public Map<String,Object> me(Authentication auth, HttpServletRequest request) {
         if (auth == null || !auth.isAuthenticated() || auth.getName().equals("anonymousUser")) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
@@ -113,7 +155,15 @@ public class AuthController {
             String fn = jdbc.queryForObject("SELECT full_name FROM app_users WHERE username=?", String.class, auth.getName());
             if (fn != null && !fn.isBlank()) fullName = fn;
         } catch (Exception ignored) {}
-        return Map.of("username", auth.getName(), "role", role, "fullName", fullName);
+
+        boolean remembered = false;
+        HttpSession session = request != null ? request.getSession(false) : null;
+        if (session != null) {
+            Object remAttr = session.getAttribute("REMEMBERED");
+            if (remAttr instanceof Boolean b) remembered = b;
+        }
+
+        return Map.of("username", auth.getName(), "role", role, "fullName", fullName, "remembered", remembered);
     }
 
     @PostMapping("/logout")
@@ -124,6 +174,25 @@ public class AuthController {
         if (session != null) {
             session.invalidate();
         }
+
+        boolean secure = isSecureRequest(request);
+        jakarta.servlet.http.Cookie clearCookie = new jakarta.servlet.http.Cookie("JSESSIONID", "");
+        clearCookie.setPath("/");
+        clearCookie.setHttpOnly(true);
+        clearCookie.setMaxAge(0);
+        if (secure) clearCookie.setSecure(true);
+        clearCookie.setAttribute("SameSite", "Lax");
+        response.addCookie(clearCookie);
+
         return Map.of("message", "Logged out");
+    }
+
+    private boolean isSecureRequest(HttpServletRequest req) {
+        if (req == null) return false;
+        if (req.isSecure()) return true;
+        String proto = req.getHeader("X-Forwarded-Proto");
+        if (proto != null && "https".equalsIgnoreCase(proto.trim())) return true;
+        String ssl = req.getHeader("X-Forwarded-Ssl");
+        return ssl != null && "on".equalsIgnoreCase(ssl.trim());
     }
 }

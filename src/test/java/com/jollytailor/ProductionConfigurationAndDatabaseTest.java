@@ -101,6 +101,14 @@ public class ProductionConfigurationAndDatabaseTest {
     }
 
     @Test
+    @DisplayName("Flyway V8 forward-only migration file exists for staff work and payments")
+    void testFlywayV8MigrationExists() {
+        java.io.File v8 = new java.io.File("src/main/resources/db/migration/V8__staff_work_and_payments.sql");
+        assertTrue(v8.exists(), "Flyway migration V8 must exist");
+        assertTrue(v8.length() > 0, "Flyway migration V8 must not be empty");
+    }
+
+    @Test
     @DisplayName("Production profile application-prod.yml specifies spring.sql.init.mode: never")
     void testProductionProfileSqlInitModeNever() throws Exception {
         java.io.File prodYaml = new java.io.File("src/main/resources/application-prod.yml");
@@ -108,5 +116,39 @@ public class ProductionConfigurationAndDatabaseTest {
         String content = java.nio.file.Files.readString(prodYaml.toPath());
         assertTrue(content.contains("mode: never"), "Production config must set spring.sql.init.mode: never");
         assertTrue(content.contains("enabled: true"), "Production config must enable Flyway");
+    }
+
+    @Test
+    @DisplayName("Supabase profile application-supabase.yml specifies spring.sql.init.mode: never and enables Flyway")
+    void testSupabaseProfileSqlInitModeNever() throws Exception {
+        java.io.File supabaseYaml = new java.io.File("src/main/resources/application-supabase.yml");
+        assertTrue(supabaseYaml.exists(), "application-supabase.yml must exist");
+        String content = java.nio.file.Files.readString(supabaseYaml.toPath());
+        assertTrue(content.contains("mode: never"), "Supabase config must set spring.sql.init.mode: never");
+        assertTrue(content.contains("enabled: true"), "Supabase config must enable Flyway");
+        assertTrue(content.contains("maximum-pool-size:"), "Supabase config must configure connection pool");
+    }
+
+    @Test
+    @DisplayName("Production resolver parses Supabase pooler URL, decodes credentials, and enforces SSL")
+    void testResolveSupabaseSessionPoolerUrl() {
+        String supabaseUrl = "postgresql://postgres.proj123:MySecret%402026%21@aws-0-ap-south-1.pooler.supabase.com:5432/postgres";
+        ProductionDataSourceConfig.ResolvedDbConfig config = ProductionDataSourceConfig.resolve(supabaseUrl, null, null);
+
+        assertNotNull(config);
+        assertEquals("postgres.proj123", config.username);
+        assertEquals("MySecret@2026!", config.password, "Encoded password must be decoded properly");
+        assertTrue(config.jdbcUrl.startsWith("jdbc:postgresql://aws-0-ap-south-1.pooler.supabase.com:5432/postgres"));
+        assertTrue(config.jdbcUrl.contains("sslmode=require"), "Supabase connection must enforce sslmode=require");
+    }
+
+    @Test
+    @DisplayName("Production resolver adds prepareThreshold=0 for Supabase transaction pooler on port 6543")
+    void testResolveSupabaseTransactionPooler() {
+        String poolerUrl = "postgresql://postgres.proj123:pass@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require";
+        ProductionDataSourceConfig.ResolvedDbConfig config = ProductionDataSourceConfig.resolve(poolerUrl, null, null);
+
+        assertNotNull(config);
+        assertTrue(config.jdbcUrl.contains("prepareThreshold=0"), "Port 6543 pooler must include prepareThreshold=0");
     }
 }

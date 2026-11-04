@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin Console | Jolly Ladies Tailor</title>
-  <link rel="icon" type="image/png" href="/images/jolly-ladies-tailor-logo.png">
+  <link rel="icon" type="image/png" href="/images/favicon.png">
   <link rel="stylesheet" href="/css/site.css">
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="/">
+  <a class="brand" href="/admin.html" title="Admin Dashboard Homepage">
     <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Logo" class="brand-logo">
     <div>
       <h1>Admin Console</h1>
@@ -26,7 +26,9 @@
 <main>
   <!-- Login Panel -->
   <section id="loginPanel" class="panel login-wrap" style="text-align:center">
-    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Sewing Machine Logo" class="brand-logo-lg">
+    <a href="/admin.html" style="display:inline-block">
+      <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Sewing Machine Logo" class="brand-logo-lg">
+    </a>
     <div class="eyebrow">Owner access</div>
     <h2>Admin login</h2>
     <p class="muted">Manage business analytics, staff, services, customers, payments, and shop settings.</p>
@@ -39,7 +41,13 @@
         <label for="password">Admin Password</label>
         <input id="password" type="password" required autocomplete="current-password">
       </div>
-      <div class="form-actions">
+      <div class="field" style="margin-top:12px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="checkbox" id="rememberMe" style="width:auto;margin:0" checked>
+          Remember me on this device (stay signed in)
+        </label>
+      </div>
+      <div class="form-actions" style="margin-top:14px">
         <button class="btn orange" type="submit">Sign in to Admin</button>
       </div>
       <div id="loginNotice" class="notice" hidden></div>
@@ -49,23 +57,29 @@
   <!-- Admin Application -->
   <div id="adminApp" class="hidden">
     <!-- Dashboard Header -->
-    <div class="toolbar">
+    <div class="toolbar" style="flex-wrap:wrap;gap:14px">
       <div>
         <div class="eyebrow">Business overview</div>
         <h2 style="font:700 32px Georgia,serif;color:var(--violet);margin:4px 0">Admin Dashboard</h2>
         <p class="muted">Live operational metrics and reporting calculated directly from PostgreSQL.</p>
       </div>
-      <div class="field" style="max-width:200px">
-        <label for="range">Reporting Period</label>
-        <select id="range">
-          <option value="today">Today</option>
-          <option value="7d">Last 7 days</option>
-          <option value="month" selected>This month</option>
-          <option value="all">All time</option>
-        </select>
+      <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <button id="btnExportAllExcelTop" class="btn orange" type="button" onclick="exportAllRecordsToExcel()" title="Download a multi-sheet .xlsx workbook containing all store data">
+          📊 Export all records to Excel
+        </button>
+        <div class="field" style="max-width:200px;margin:0">
+          <label for="range">Reporting Period</label>
+          <select id="range">
+            <option value="today">Today</option>
+            <option value="7d">Last 7 days</option>
+            <option value="month" selected>This month</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
       </div>
     </div>
 
+    <div id="excelExportNotice" class="notice" hidden></div>
     <div id="statsNotice" class="notice" hidden></div>
 
     <!-- KPI Metric Cards -->
@@ -95,10 +109,6 @@
         <strong id="statProducts">0</strong>
       </div>
       <div class="stat">
-        <span>New Enquiries</span>
-        <strong id="statRequests">0</strong>
-      </div>
-      <div class="stat">
         <span>Average Order Value</span>
         <strong id="statAverage">₹0.00</strong>
       </div>
@@ -109,7 +119,7 @@
       <div class="toolbar">
         <h2 style="margin:0">Sales Trend — Last 7 Days</h2>
         <div class="form-actions" style="margin:0">
-          <a class="btn orange" href="/api/admin/reports/export-excel" download="jolly-ladies-tailor-data.xlsx" id="downloadAllDataBtn">⬇ Download All Data (.xlsx)</a>
+          <button class="btn orange" type="button" onclick="exportAllRecordsToExcel()">📊 Export all records to Excel</button>
         </div>
       </div>
       <div id="salesChart" style="display:grid;gap:10px;margin-top:12px"></div>
@@ -154,88 +164,111 @@
       </section>
     </div>
 
-    <!-- Recent Shop Orders -->
-    <section class="panel section">
-      <div class="toolbar">
+    <!-- Customers & Orders (Unified Directory & Order Management) -->
+    <section class="panel section" id="customersAndOrdersSection">
+      <div class="toolbar" style="flex-wrap:wrap;gap:12px">
         <div>
-          <h2 style="margin:0">Recent Shop Orders</h2>
-          <p class="muted">Latest orders placed across all tailoring customers. Inspect invoices and customer measurements.</p>
+          <h2 style="margin:0;color:var(--violet)">Customers & Orders</h2>
+          <p class="muted">Search customers, view order histories, measurements, and live shop orders in one unified section.</p>
         </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Bill No.</th>
-              <th>Customer</th>
-              <th>Status</th>
-              <th>Payment Status</th>
-              <th>Total</th>
-              <th>Paid</th>
-              <th>Due</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="adminRecentOrdersRows">
-            <tr><td colspan="8">Loading recent orders...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Customer Search and Order History -->
-    <section class="panel section">
-      <div class="toolbar">
-        <div>
-          <h2 style="margin:0">Customer Directory & Order History</h2>
-          <p class="muted">Search customer records, lifetime billing, and order histories.</p>
-        </div>
-        <div class="field" style="min-width:280px">
-          <input id="adminCustomerSearch" placeholder="Search customer by name or phone...">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button id="btnAdminRegisterCustomer" class="btn orange" type="button" onclick="openAdminNewCustomerModal()">
+            ＋ Register Customer
+          </button>
+          <div class="field" style="min-width:280px;margin:0">
+            <input id="adminCustomerSearch" placeholder="Search customer by name or phone...">
+          </div>
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Customer Name</th>
-              <th>Phone</th>
-              <th>Total Orders</th>
-              <th>Total Spent</th>
-              <th>Total Due</th>
-              <th>Last Order</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="adminCustomersRows">
-            <tr><td colspan="7">Loading customer directory...</td></tr>
-          </tbody>
-        </table>
+      <!-- View Selector Tabs -->
+      <div class="customer-orders-tabs" style="display:flex;gap:8px;margin:12px 0 16px;border-bottom:1px solid var(--line);padding-bottom:10px;flex-wrap:wrap">
+        <button id="tabCustAll" class="btn orange btn-sm" type="button" onclick="setCustomerOrderView('all')">
+          📋 All (Directory &amp; Orders)
+        </button>
+        <button id="tabCustOnly" class="btn ghost btn-sm" type="button" onclick="setCustomerOrderView('customers')">
+          👥 Customers (<span id="custCountBadge">0</span>)
+        </button>
+        <button id="tabOrdersOnly" class="btn ghost btn-sm" type="button" onclick="setCustomerOrderView('orders')">
+          🛍️ Recent Orders (<span id="ordersCountBadge">0</span>)
+        </button>
       </div>
 
-      <!-- Customer Order History Detail Box -->
-      <div id="adminCustomerOrdersDetail" class="panel hidden" style="margin-top:16px;background:#fff8fd;border:1px solid var(--pink)">
-        <div class="toolbar">
-          <h3 id="adminCustomerDetailTitle" style="margin:0;color:var(--violet)">Customer Order History</h3>
-          <button id="closeCustomerOrders" class="btn ghost" type="button">Close</button>
+      <!-- Customer Directory Subpanel -->
+      <div id="subpanelCustomers" style="margin-bottom:24px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0;font-size:16px;color:var(--violet)">Customer Directory</h3>
+          <small class="muted">Select a customer or click 'Orders' to view order history</small>
         </div>
-        <div class="table-wrap" style="margin-top:10px">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Customer Name</th>
+                <th>Phone</th>
+                <th>Total Orders</th>
+                <th>Total Spent</th>
+                <th>Total Due</th>
+                <th>Last Order</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="adminCustomersRows">
+              <tr><td colspan="7">Loading customer directory...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Customer Order History Detail Box -->
+        <div id="adminCustomerOrdersDetail" class="panel hidden" style="margin-top:16px;background:#fff8fd;border:1.5px solid var(--pink);border-radius:12px;padding:16px">
+          <div class="toolbar">
+            <h3 id="adminCustomerDetailTitle" style="margin:0;color:var(--violet)">Customer Order History</h3>
+            <button id="closeCustomerOrders" class="btn ghost btn-sm" type="button">✕ Close History</button>
+          </div>
+          <div class="table-wrap" style="margin-top:10px">
+            <table>
+              <thead>
+                <tr>
+                  <th>Bill No.</th>
+                  <th>Status</th>
+                  <th>Payment Status</th>
+                  <th>Total</th>
+                  <th>Paid</th>
+                  <th>Due</th>
+                  <th>Promised Delivery</th>
+                  <th>Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="adminCustomerOrdersRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Shop Orders Subpanel -->
+      <div id="subpanelRecentOrders">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0;font-size:16px;color:var(--violet)">Recent Shop Orders</h3>
+          <small class="muted">Latest orders placed across all tailoring customers</small>
+        </div>
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Bill No.</th>
+                <th>Customer</th>
                 <th>Status</th>
                 <th>Payment Status</th>
                 <th>Total</th>
                 <th>Paid</th>
                 <th>Due</th>
-                <th>Promised Delivery</th>
-                <th>Date</th>
                 <th>Action</th>
               </tr>
             </thead>
-            <tbody id="adminCustomerOrdersRows"></tbody>
+            <tbody id="adminRecentOrdersRows">
+              <tr><td colspan="8">Loading recent orders...</td></tr>
+            </tbody>
           </table>
         </div>
       </div>
@@ -243,13 +276,18 @@
 
     <!-- Payment History / Ledger Log -->
     <section class="panel section">
-      <div class="toolbar">
+      <div class="toolbar" style="flex-wrap:wrap;gap:12px">
         <div>
           <h2 style="margin:0">Payment Ledger & Transactions</h2>
           <p class="muted">All verified payments and refunds recorded across tailor sessions.</p>
         </div>
-        <div class="field" style="min-width:260px">
-          <input id="adminPaymentSearch" placeholder="Search by bill, customer, or UPI ref...">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button id="btnOpenShopSettings" class="btn ghost btn-sm" type="button" onclick="openAdminShopSettingsModal()" title="Configure shop information, UPI ID, and GPay QR code">
+            ⚙️ Shop Details & GPay QR
+          </button>
+          <div class="field" style="min-width:260px;margin:0">
+            <input id="adminPaymentSearch" placeholder="Search by bill, customer, or UPI ref...">
+          </div>
         </div>
       </div>
 
@@ -272,50 +310,6 @@
           </tbody>
         </table>
       </div>
-    </section>
-
-    <!-- Shop Settings & GPay QR -->
-    <section class="panel section">
-      <h2>Shop Details & GPay QR Code</h2>
-      <p class="muted">Update shop information, contact details, and the Google Pay QR code for customer scan.</p>
-      <form id="shopSettingsForm">
-        <div class="grid">
-          <div class="field">
-            <label for="shopName">Shop Name</label>
-            <input id="shopName" required maxlength="160">
-          </div>
-          <div class="field">
-            <label for="shopPhone">Phone Number</label>
-            <input id="shopPhone" maxlength="30" placeholder="+91 98300 XXXXX">
-          </div>
-          <div class="field full">
-            <label for="shopAddress">Shop Address & Directions</label>
-            <textarea id="shopAddress" rows="2" maxlength="1000" placeholder="Shop address, market location, Kolkata"></textarea>
-          </div>
-          <div class="field">
-            <label for="shopWhatsapp">WhatsApp Number (e.g. 919830012345)</label>
-            <input id="shopWhatsapp" maxlength="30" placeholder="91XXXXXXXXXX">
-          </div>
-          <div class="field">
-            <label for="shopAdminPhone">Admin Notification Phone (WhatsApp)</label>
-            <input id="shopAdminPhone" maxlength="30" placeholder="e.g. 919830099999">
-          </div>
-          <div class="field">
-            <label for="shopUpi">UPI Payment ID</label>
-            <input id="shopUpi" maxlength="120" placeholder="jollytailor@okaxis">
-          </div>
-          <div class="field full">
-            <label for="shopQr">GPay / PhonePe / UPI QR Image</label>
-            <input id="shopQr" type="file" accept="image/png,image/jpeg,image/webp">
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn orange" type="submit">Save Shop Details</button>
-          <button id="uploadShopQr" class="btn ghost" type="button">Upload GPay QR</button>
-        </div>
-        <div id="shopNotice" class="notice" hidden></div>
-        <img id="shopQrPreview" class="hidden" alt="GPay QR preview" style="max-width:200px;margin-top:12px;border:1px solid var(--line);padding:8px;border-radius:10px;background:#fff">
-      </form>
     </section>
 
     <!-- Services & Pricing Management (Spacious Full-Width UX) -->
@@ -467,35 +461,6 @@
       </div>
     </section>
 
-    <!-- Consumer Enquiries -->
-    <section class="panel section">
-      <div class="toolbar">
-        <div>
-          <h2 style="margin:0">Consumer Website Enquiries</h2>
-          <p class="muted">Requests submitted by visitors on the public homepage.</p>
-        </div>
-        <button id="refreshRequests" class="btn ghost" type="button">Refresh Enquiries</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Customer Name</th>
-              <th>Phone</th>
-              <th>Email</th>
-              <th>Requested Service</th>
-              <th>Message</th>
-              <th>Received Date</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="requestsRows">
-            <tr><td colspan="7">Loading enquiries...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
     <!-- Staff Management & Security Controls -->
     <section class="panel section" id="staffSection">
       <div class="toolbar">
@@ -550,36 +515,182 @@
               <th>Username</th>
               <th>Role</th>
               <th>Status</th>
-              <th>Created Date</th>
-              <th>Last Login</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody id="staffDirectoryRows">
-            <tr><td colspan="7">Loading staff directory...</td></tr>
+            <tr><td colspan="5">Loading staff directory...</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- PostgreSQL Backup Procedures -->
-    <section class="panel section">
-      <h2>PostgreSQL Database Backup & Recovery Procedure</h2>
-      <p class="muted">Regular database backups ensure customer measurements and billing records are never lost.</p>
-      <div style="background:#f9f5fa;padding:16px;border-radius:10px;font-family:monospace;font-size:13px;line-height:1.6">
-        <strong>1. Create Encrypted/Compressed PostgreSQL Backup:</strong><br>
-        <code>pg_dump -h localhost -p 5432 -U jolly_app -d jolly_tailor -F c -b -v -f "jolly_tailor_backup_%date:~-4,4%%date:~-7,2%%date:~-10,2%.dump"</code><br><br>
-        <strong>2. Restore PostgreSQL Backup:</strong><br>
-        <code>pg_restore -h localhost -p 5432 -U jolly_app -d jolly_tailor -v -c "jolly_tailor_backup.dump"</code><br><br>
-        <strong>3. Docker Local Backup Command:</strong><br>
-        <code>docker compose exec -T postgres pg_dump -U jolly_app -d jolly_tailor &gt; backup.sql</code>
+    <!-- Staff Work & Hisab Ledger -->
+    <section class="panel section" id="staffHisabSection">
+      <div class="toolbar" style="flex-wrap:wrap;gap:14px">
+        <div>
+          <div class="eyebrow" style="color:var(--orange)">Internal Tailor Accounting</div>
+          <h2 style="margin:2px 0;font:700 24px Georgia,serif;color:var(--violet)">Staff Work &amp; Hisab</h2>
+          <p class="muted" style="margin:2px 0 0">Record completed tailor work, assign costs, track payments, and maintain remaining balance accounts per staff member.</p>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+          <div class="field" style="min-width:260px;margin:0">
+            <label for="hisabStaffSelect" style="font-weight:700">Select Staff Member *</label>
+            <select id="hisabStaffSelect" onchange="handleHisabStaffChange(this.value)">
+              <option value="">-- Choose a staff member --</option>
+            </select>
+          </div>
+          <button class="btn ghost btn-sm" type="button" onclick="refreshHisabLedger()" style="margin-bottom:2px">🔄 Refresh</button>
+        </div>
+      </div>
+
+      <!-- Empty State when no staff selected -->
+      <div id="hisabEmptyState" style="text-align:center;padding:36px 20px;background:#fdf8fc;border:1px dashed #ebd3e8;border-radius:14px;margin-top:14px">
+        <div style="font-size:36px;margin-bottom:8px">🧵</div>
+        <h3 style="margin:0 0 4px;color:var(--violet)">Select a staff member above</h3>
+        <p class="muted" style="margin:0">Choose any tailor or staff member to view their complete work entries, record new jobs, and manage their hisab.</p>
+      </div>
+
+      <!-- Selected Staff Hisab Content Container -->
+      <div id="hisabContentContainer" class="hidden" style="margin-top:16px">
+        <!-- Staff Summary Header & Totals -->
+        <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 20px;flex-wrap:wrap;gap:12px">
+          <div>
+            <h3 id="hisabStaffName" style="margin:0;color:var(--violet);font-size:20px">Staff Member</h3>
+            <p id="hisabStaffRole" class="muted" style="margin:2px 0 0;font-size:12px"></p>
+          </div>
+          <button id="toggleRecordWorkBtn" class="btn orange btn-sm" type="button" onclick="toggleRecordWorkCard()">＋ Record Work Done</button>
+        </div>
+
+        <!-- KPI Summary Cards -->
+        <div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:16px 0">
+          <div class="stat">
+            <span style="font-size:12px;font-weight:700;color:var(--muted)">TOTAL WORK VALUE (EARNED)</span>
+            <strong id="hisabTotalEarned" style="color:var(--violet)">₹0.00</strong>
+          </div>
+          <div class="stat">
+            <span style="font-size:12px;font-weight:700;color:var(--muted)">TOTAL PAID TO STAFF</span>
+            <strong id="hisabTotalPaid" style="color:var(--green)">₹0.00</strong>
+          </div>
+          <div class="stat">
+            <span style="font-size:12px;font-weight:700;color:var(--muted)">REMAINING BALANCE OWED</span>
+            <strong id="hisabRemainingBalance" style="color:var(--orange)">₹0.00</strong>
+          </div>
+        </div>
+
+        <!-- Record Work Form Card -->
+        <div id="recordWorkCard" class="hidden" style="background:#fdf8fc;border:1.5px solid #ebd3e8;border-radius:14px;padding:20px;margin-bottom:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div>
+              <h3 style="margin:0;color:var(--violet);font:700 18px Georgia,serif">＋ Record Work Completed</h3>
+              <p class="muted" style="margin:2px 0 0;font-size:13px">Manually describe any tailoring, stitching, or alteration work completed by this staff member.</p>
+            </div>
+            <button class="btn ghost btn-sm" type="button" onclick="toggleRecordWorkCard()">✕ Close</button>
+          </div>
+          <form id="recordStaffWorkForm" onsubmit="handleRecordStaffWork(event)">
+            <input type="hidden" id="workStaffId" value="">
+            <div class="grid">
+              <div class="field">
+                <label for="workDate">Date of Work *</label>
+                <input id="workDate" type="date" required>
+              </div>
+              <div class="field full">
+                <label for="workDescription">Work Done (Description) *</label>
+                <input id="workDescription" required maxlength="255" placeholder="e.g. Stitched 3 blouses, Altered 2 salwar suits, Lining attachment...">
+              </div>
+              <div class="field">
+                <label for="workTotalCost">Total Cost (₹) *</label>
+                <input id="workTotalCost" type="number" step="0.5" min="0" required placeholder="Total agreed cost (e.g. 600)" oninput="updateWorkBalancePreview()">
+              </div>
+              <div class="field">
+                <label for="workPayNow">Pay Now (₹) <span class="muted" style="font-weight:400">(Amount paid at this time)</span></label>
+                <input id="workPayNow" type="number" step="0.5" min="0" placeholder="0 if unpaid at this time" oninput="updateWorkBalancePreview()">
+              </div>
+              <div class="field">
+                <label for="workPayMethod">Payment Method (if paying now)</label>
+                <select id="workPayMethod">
+                  <option value="CASH">Cash in Shop</option>
+                  <option value="UPI">Google Pay / PhonePe / UPI</option>
+                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Remaining Balance for this Work</label>
+                <div id="workBalancePreview" style="padding:11px 12px;background:#fff;border:1px solid #d9c9df;border-radius:9px;font-weight:700;color:var(--orange)">
+                  ₹0.00
+                </div>
+              </div>
+              <div class="field full">
+                <label for="workNotes">Internal Notes / Payment Reference (Optional)</label>
+                <input id="workNotes" maxlength="500" placeholder="e.g. Fabric from customer Priya, advance paid at counter">
+              </div>
+            </div>
+            <div class="form-actions" style="margin-top:16px">
+              <button class="btn orange" type="submit">💾 Save Work Entry</button>
+              <button class="btn ghost" type="button" onclick="toggleRecordWorkCard()">Cancel</button>
+            </div>
+            <div id="workNotice" class="notice" hidden></div>
+          </form>
+        </div>
+
+        <!-- Work History Table -->
+        <div style="margin-bottom:24px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <h3 style="margin:0;font-size:16px;color:var(--violet)">Work History &amp; Balances</h3>
+            <small class="muted">All work entries recorded for this staff member</small>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Work Done</th>
+                  <th>Total Cost</th>
+                  <th>Amount Paid</th>
+                  <th>Remaining Balance</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="hisabWorkRows">
+                <tr><td colspan="7">Loading work entries...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Dated Payment History Table -->
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <h3 style="margin:0;font-size:16px;color:var(--violet)">Payment History &amp; Disbursements</h3>
+            <small class="muted">Complete dated settlement history for this staff member</small>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Payment Date</th>
+                  <th>Amount</th>
+                  <th>Method</th>
+                  <th>For Work Entry / Notes</th>
+                  <th>Recorded By</th>
+                </tr>
+              </thead>
+              <tbody id="hisabPaymentRows">
+                <tr><td colspan="5">Loading payment records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
+
   </div>
 </main>
 
 <footer class="footer">
-  Admin actions affect the shared PostgreSQL database. Use strong passwords and keep routine backups.
+  &copy; 2026 Jolly Ladies Tailor. Atelier Administration Portal.
 </footer>
 
 <!-- Admin Order Measurement Snapshot Modal -->
@@ -668,6 +779,283 @@
         <button class="btn ghost" type="button" onclick="closeResetStaffPwModal()">Cancel</button>
       </div>
       <div id="resetStaffPwNotice" class="notice" hidden></div>
+    </form>
+  </div>
+</div>
+
+<!-- Admin Register / Edit Customer Modal -->
+<div id="adminCustomerModal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:540px">
+    <div class="modal-header">
+      <div>
+        <div class="eyebrow" style="color:var(--orange)">Client Management</div>
+        <h3 id="adminCustomerModalTitle" class="modal-title">Register Customer</h3>
+        <p class="muted" style="margin:2px 0 0">Synchronized directly with the Tailor workspace and store database.</p>
+      </div>
+      <button id="closeAdminCustomerModal" class="btn ghost btn-sm" type="button" onclick="closeAdminCustomerModal()">✕ Close</button>
+    </div>
+    <form id="adminCustomerForm" onsubmit="handleSaveAdminCustomer(event)">
+      <input type="hidden" id="adminCustomerId" value="">
+      <div class="field" style="margin-bottom:12px">
+        <label for="adminCustName">Customer Full Name *</label>
+        <input id="adminCustName" required maxlength="160" placeholder="e.g. Priyadarshini Roy">
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="adminCustPhone">Phone Number (at least 7 digits) *</label>
+        <input id="adminCustPhone" type="tel" required maxlength="20" placeholder="e.g. 9830012345">
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="adminCustAddress">Address / Location</label>
+        <input id="adminCustAddress" maxlength="255" placeholder="e.g. 14 Lake Road, Kalighat, Kolkata">
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="adminCustNotes">Customer Preferences / Notes</label>
+        <textarea id="adminCustNotes" rows="2" placeholder="Fabric choices, styling preferences, or VIP instructions..."></textarea>
+      </div>
+      <div class="form-actions" style="margin-top:18px">
+        <button id="adminCustomerSubmitBtn" class="btn orange" type="submit">Save Customer</button>
+        <button id="adminCustomerCancelBtn" class="btn ghost" type="button" onclick="closeAdminCustomerModal()">Cancel</button>
+      </div>
+      <div id="adminCustomerNotice" class="notice" hidden></div>
+    </form>
+  </div>
+</div>
+
+<!-- Admin Customer Measurements Modal -->
+<div id="adminCustomerMeasurementsModal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:760px">
+    <div class="modal-header">
+      <div>
+        <div class="eyebrow" style="color:var(--orange)">Client Measurement Slip</div>
+        <h3 id="adminCustMeasureTitle" class="modal-title">Measurements for Customer</h3>
+        <p class="muted" style="margin:2px 0 0">Synchronized directly with the Tailor workspace and shared database.</p>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn light btn-sm" type="button" onclick="openAdminCustMeasureForm()">＋ Take New Measurement</button>
+        <button class="btn ghost btn-sm" type="button" onclick="closeAdminCustomerMeasurementsModal()">✕ Close</button>
+      </div>
+    </div>
+
+    <!-- Embedded / Collapsible Admin Measurement Form -->
+    <div id="adminCustMeasureFormCard" class="hidden" style="margin-bottom:18px;background:#fdf7fc;border:1.5px solid var(--violet);border-radius:12px;padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h4 id="adminCustMeasureFormHeading" style="margin:0;color:var(--violet)">Record Measurement Profile</h4>
+        <button class="btn ghost btn-sm" type="button" onclick="closeAdminCustMeasureForm()">✕ Cancel</button>
+      </div>
+      <form id="adminCustMeasureForm" onsubmit="handleSaveAdminCustomerMeasurement(event)">
+        <input type="hidden" id="adminCustMeasureEditId" value="">
+        <div class="grid">
+          <div class="field">
+            <label for="adminCustMeasureGarment">Garment Type *</label>
+            <select id="adminCustMeasureGarment" onchange="drawAdminCustDynamicFields(this.value)">
+              <option value="CHURIDAR / BLOUSE" selected>CHURIDAR / BLOUSE (Slip)</option>
+              <option value="PANT">PANT (Slip)</option>
+              <option value="CHURIDAR / BLOUSE & PANT">CHURIDAR / BLOUSE &amp; PANT (Suit Slip)</option>
+              <option value="Blouse">Blouse</option>
+              <option value="Kurti">Kurti</option>
+              <option value="Salwar / Kameez">Salwar / Kameez</option>
+              <option value="Lehenga">Lehenga</option>
+              <option value="Pant">Pant</option>
+              <option value="Alteration">Alteration</option>
+              <option value="General body measurements">General body measurements</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="adminCustMeasureUnit">Unit</label>
+            <select id="adminCustMeasureUnit" onchange="drawAdminCustDynamicFields(val('adminCustMeasureGarment'))">
+              <option value="in">Inches (in)</option>
+              <option value="cm">Centimetres (cm)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Dynamic Fields Container -->
+        <div id="adminCustDynamicFields" style="margin-top:12px"></div>
+
+        <div class="grid" style="margin-top:12px">
+          <div class="field">
+            <label for="adminCustMeasureFit">Fit Preference</label>
+            <select id="adminCustMeasureFit">
+              <option value="Regular">Regular</option>
+              <option value="Slim Fit">Slim Fit</option>
+              <option value="Comfort / Loose">Comfort / Loose</option>
+              <option value="Custom as discussed">Custom as discussed</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="adminCustMeasureNotes">Tailor / Fitting Notes</label>
+            <input id="adminCustMeasureNotes" placeholder="Neck cut, lining, piping, special instructions...">
+          </div>
+        </div>
+
+        <div class="form-actions" style="margin-top:14px">
+          <button id="adminCustMeasureSubmitBtn" class="btn orange" type="submit">💾 Save Measurement Profile</button>
+          <button class="btn ghost" type="button" onclick="closeAdminCustMeasureForm()">Cancel</button>
+        </div>
+        <div id="adminCustMeasureNotice" class="notice" hidden></div>
+      </form>
+    </div>
+
+    <!-- Customer Measurements List -->
+    <div id="adminCustMeasurementsList">
+      <p class="muted">Loading customer measurements...</p>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Record Order Payment Modal -->
+<div id="adminOrderPaymentModal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <div>
+        <div class="eyebrow" style="color:var(--orange)">Order Billing & Receipts</div>
+        <h3 class="modal-title">Record Order Payment</h3>
+        <p id="adminPayModalSubtitle" class="muted" style="margin:2px 0 0"></p>
+      </div>
+      <button class="btn ghost btn-sm" type="button" onclick="closeAdminOrderPaymentModal()">✕ Close</button>
+    </div>
+    <div id="adminPaySummary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;background:#faf3f8;padding:12px;border-radius:10px">
+      <div><small class="muted">Order Total</small><div id="adminPayTotal" style="font-weight:700">₹0</div></div>
+      <div><small class="muted">Already Paid</small><div id="adminPayPaid" style="font-weight:700;color:var(--violet)">₹0</div></div>
+      <div><small class="muted">Balance Due</small><div id="adminPayDue" style="font-weight:700;color:#b30000">₹0</div></div>
+    </div>
+    <form id="adminOrderPaymentForm" onsubmit="handleSaveAdminOrderPayment(event)">
+      <input type="hidden" id="adminPayOrderId" value="">
+      <div class="field" style="margin-bottom:12px">
+        <label for="adminPayAmount">Payment Amount (₹) *</label>
+        <input id="adminPayAmount" type="number" step="1" min="1" required placeholder="Amount to record">
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="adminPayMethod">Payment Method *</label>
+        <select id="adminPayMethod">
+          <option value="CASH">Cash in Shop</option>
+          <option value="UPI">Google Pay / PhonePe / UPI</option>
+          <option value="CARD">Debit / Credit Card</option>
+          <option value="BANK_TRANSFER">Direct Bank Transfer</option>
+          <option value="OTHER">Other / Cheque</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="adminPayReference">Reference / UPI Transaction ID</label>
+        <input id="adminPayReference" placeholder="e.g. UPI Ref / Receipt No.">
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="adminPayNote">Internal Accounting Note</label>
+        <input id="adminPayNote" placeholder="e.g. Advance paid at counter, final bill settled">
+      </div>
+      <div class="form-actions" style="margin-top:18px">
+        <button class="btn orange" type="submit">Confirm & Record Payment</button>
+        <button class="btn ghost" type="button" onclick="openAdminShopSettingsModal()">⚙️ GPay QR & UPI Settings</button>
+        <button class="btn ghost" type="button" onclick="closeAdminOrderPaymentModal()">Cancel</button>
+      </div>
+      <div id="adminPayNotice" class="notice" hidden></div>
+    </form>
+  </div>
+</div>
+
+<!-- Admin Shop Details & GPay QR Modal -->
+<div id="adminShopSettingsModal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:680px">
+    <div class="modal-header">
+      <div>
+        <div class="eyebrow" style="color:var(--orange)">Store Configuration & UPI</div>
+        <h3 class="modal-title">Shop Details & GPay QR Code</h3>
+        <p class="muted" style="margin:2px 0 0">Update shop details, contact numbers, UPI ID, and QR code used for invoices, bills, and payments.</p>
+      </div>
+      <button class="btn ghost btn-sm" type="button" onclick="closeAdminShopSettingsModal()">✕ Close</button>
+    </div>
+    <form id="shopSettingsForm">
+      <div class="grid">
+        <div class="field">
+          <label for="shopName">Shop Name</label>
+          <input id="shopName" required maxlength="160">
+        </div>
+        <div class="field">
+          <label for="shopPhone">Phone Number</label>
+          <input id="shopPhone" maxlength="30" placeholder="+91 98300 XXXXX">
+        </div>
+        <div class="field full">
+          <label for="shopAddress">Shop Address & Directions</label>
+          <textarea id="shopAddress" rows="2" maxlength="1000" placeholder="Shop address, market location, Kolkata"></textarea>
+        </div>
+        <div class="field">
+          <label for="shopWhatsapp">WhatsApp Number (e.g. 919830012345)</label>
+          <input id="shopWhatsapp" maxlength="30" placeholder="91XXXXXXXXXX">
+        </div>
+        <div class="field">
+          <label for="shopAdminPhone">Admin Notification Phone (WhatsApp)</label>
+          <input id="shopAdminPhone" maxlength="30" placeholder="e.g. 919830099999">
+        </div>
+        <div class="field">
+          <label for="shopUpi">UPI Payment ID</label>
+          <input id="shopUpi" maxlength="120" placeholder="jollytailor@okaxis">
+        </div>
+        <div class="field full">
+          <label for="shopQr">GPay / PhonePe / UPI QR Image</label>
+          <input id="shopQr" type="file" accept="image/png,image/jpeg,image/webp">
+        </div>
+      </div>
+      <div class="form-actions" style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+        <button id="uploadShopQr" class="btn ghost" type="button">Upload GPay QR</button>
+        <button class="btn orange" type="submit">Save Shop Details</button>
+      </div>
+      <div id="shopNotice" class="notice" hidden></div>
+      <div style="text-align:center;margin-top:10px">
+        <img id="shopQrPreview" class="hidden" alt="GPay QR preview" style="max-width:200px;margin-top:8px;border:1px solid var(--line);padding:8px;border-radius:10px;background:#fff">
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Record Later Payment Against Work Entry Modal -->
+<div id="recordStaffEntryPaymentModal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <div>
+        <div class="eyebrow" style="color:var(--orange)">Staff Work Settlement</div>
+        <h3 class="modal-title">Record Payment for Work</h3>
+        <p id="sepSubtitle" class="muted" style="margin:2px 0 0;font-size:13px"></p>
+      </div>
+      <button class="btn ghost btn-sm" type="button" onclick="closeRecordStaffEntryPaymentModal()">✕ Close</button>
+    </div>
+    <div id="sepSummary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;background:#faf3f8;padding:12px;border-radius:10px">
+      <div><small class="muted">Total Cost</small><div id="sepTotalCost" style="font-weight:700">₹0.00</div></div>
+      <div><small class="muted">Already Paid</small><div id="sepAlreadyPaid" style="font-weight:700;color:var(--green)">₹0.00</div></div>
+      <div><small class="muted">Remaining Due</small><div id="sepRemainingDue" style="font-weight:700;color:var(--orange)">₹0.00</div></div>
+    </div>
+    <form id="recordStaffEntryPaymentForm" onsubmit="handleSaveStaffEntryPayment(event)">
+      <input type="hidden" id="sepStaffId" value="">
+      <input type="hidden" id="sepWorkId" value="">
+      <div class="field" style="margin-bottom:12px">
+        <label for="sepAmount">Payment Amount (₹) *</label>
+        <input id="sepAmount" type="number" step="0.5" min="0.5" required placeholder="Amount to pay">
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="sepDate">Payment Date *</label>
+        <input id="sepDate" type="date" required>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="sepMethod">Payment Method *</label>
+        <select id="sepMethod">
+          <option value="CASH">Cash in Shop</option>
+          <option value="UPI">Google Pay / PhonePe / UPI</option>
+          <option value="BANK_TRANSFER">Bank Transfer</option>
+          <option value="OTHER">Other</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="sepReference">Reference / Transaction ID (Optional)</label>
+        <input id="sepReference" placeholder="e.g. UPI Ref / Cash Voucher #">
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label for="sepNote">Payment Note (Optional)</label>
+        <input id="sepNote" placeholder="e.g. Second installment, final settlement">
+      </div>
+      <div class="form-actions" style="margin-top:18px">
+        <button class="btn orange" type="submit">Confirm &amp; Record Payment</button>
+        <button class="btn ghost" type="button" onclick="closeRecordStaffEntryPaymentModal()">Cancel</button>
+      </div>
+      <div id="sepNotice" class="notice" hidden></div>
     </form>
   </div>
 </div>

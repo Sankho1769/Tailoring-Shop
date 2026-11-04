@@ -60,18 +60,55 @@ public class InvoicePdfService {
                 "SELECT amount, method, reference, note, COALESCE(payment_type, 'PAYMENT') AS payment_type, received_at " +
                 "FROM payments WHERE order_id=? ORDER BY received_at", orderId);
 
+        UUID customerId = (UUID) order.get("customer_id");
+        List<Map<String, Object>> measurements = new ArrayList<>();
+        try {
+            Object mIdsRaw = null;
+            try {
+                mIdsRaw = jdbc.queryForObject("SELECT measurement_ids FROM tailoring_orders WHERE id=?", String.class, orderId);
+            } catch (Exception ignored) {}
+            if (mIdsRaw != null && !mIdsRaw.toString().isBlank()) {
+                for (String part : mIdsRaw.toString().split(",")) {
+                    if (!part.trim().isBlank()) {
+                        try {
+                            UUID mid = UUID.fromString(part.trim());
+                            Map<String,Object> mRow = jdbc.queryForMap(
+                                    "SELECT garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes " +
+                                    "FROM measurements WHERE id=?", mid);
+                            measurements.add(mRow);
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+            if (measurements.isEmpty()) {
+                Object mId = order.get("measurement_id");
+                if (mId != null) {
+                    try {
+                        Map<String,Object> mRow = jdbc.queryForMap(
+                                "SELECT garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes " +
+                                "FROM measurements WHERE id=?", mId);
+                        measurements.add(mRow);
+                    } catch (Exception ignored) {}
+                }
+            }
+            if (measurements.isEmpty() && customerId != null) {
+                measurements = jdbc.queryForList(
+                        "SELECT garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes " +
+                        "FROM measurements WHERE customer_id=? ORDER BY created_at DESC", customerId);
+            }
+        } catch (Exception ignored) {}
+
         Map<String, String> shopSettings = new LinkedHashMap<>();
         jdbc.query("SELECT setting_key, setting_value FROM shop_settings", rs -> {
             shopSettings.put(rs.getString(1), rs.getString(2));
         });
 
         String shopName = shopSettings.getOrDefault("shop_name", "Jolly Ladies Tailor");
-        String shopAddress = shopSettings.getOrDefault("shop_address", "12/A Southern Avenue, Kolkata - 700029");
+        String shopAddress = shopSettings.getOrDefault("shop_address", "6/1 Banerjee Para Road - 700061");
         String shopPhone = shopSettings.getOrDefault("shop_phone", "9748546778");
         String shopWhatsApp = shopSettings.getOrDefault("whatsapp_number", "919748546778");
 
         // Authoritative Customer Debt Calculation: Separate current order balance vs historical previous orders
-        UUID customerId = (UUID) order.get("customer_id");
         BigDecimal previousOrdersDue = jdbc.queryForObject(
                 "SELECT COALESCE(SUM(GREATEST(total - amount_paid, 0)), 0) FROM tailoring_orders " +
                 "WHERE customer_id = ? AND id <> ? AND status <> 'CANCELLED'",
@@ -191,6 +228,41 @@ public class InvoicePdfService {
             custTable.addCell(custCell);
             document.add(custTable);
             document.add(new Paragraph(" "));
+
+            // 3b. Customer Measurements on Record (Where available)
+            if (!measurements.isEmpty()) {
+                PdfPTable measTable = new PdfPTable(1);
+                measTable.setWidthPercentage(100);
+                PdfPCell measCell = new PdfPCell();
+                measCell.setBorderColor(BORDER_COLOR);
+                measCell.setBackgroundColor(BRAND_SOFT);
+                measCell.setPadding(6);
+                measCell.addElement(new Paragraph("CUSTOMER MEASUREMENT PROFILE ON RECORD (FOR CUSTOM TAILORING):", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, BRAND_VIOLET)));
+                int count = 0;
+                for (Map<String, Object> m : measurements) {
+                    if (count++ >= 2) break;
+                    String gType = String.valueOf(m.get("garment_type"));
+                    String unit = m.get("unit") != null ? String.valueOf(m.get("unit")) : "in";
+                    String fit = m.get("fit_preference") != null ? String.valueOf(m.get("fit_preference")) : "";
+                    String dimFormatted = formatDimensions(String.valueOf(m.get("dimensions")), unit);
+                    String notes = m.get("notes") != null ? String.valueOf(m.get("notes")) : "";
+
+                    StringBuilder sb = new StringBuilder("• ").append(gType);
+                    if (!fit.isBlank()) sb.append(" (Fit: ").append(fit).append(")");
+                    sb.append(" [Unit: ").append(unit).append("]");
+                    measCell.addElement(new Paragraph(sb.toString(), FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, TEXT_DARK)));
+
+                    if (!dimFormatted.isBlank()) {
+                        measCell.addElement(new Paragraph("   " + dimFormatted, smallMuted));
+                    }
+                    if (!notes.isBlank()) {
+                        measCell.addElement(new Paragraph("   Notes: " + notes, smallMuted));
+                    }
+                }
+                measTable.addCell(measCell);
+                document.add(measTable);
+                document.add(new Paragraph(" "));
+            }
 
             // 4. Line Items Table
             PdfPTable itemsTable = new PdfPTable(4);
@@ -428,5 +500,85 @@ public class InvoicePdfService {
         } catch (Exception e) {
             return BigDecimal.ZERO;
         }
+    }
+
+    private String formatDimensions(String dimJson, String unit) {
+        if (dimJson == null || dimJson.isBlank() || "{}".equals(dimJson.trim())) {
+            return "";
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<String, Object> map = mapper.readValue(
+                    dimJson, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            if (map.isEmpty()) return "";
+            List<String> parts = new ArrayList<>();
+            String unitSuffix = "in".equalsIgnoreCase(unit) ? "\"" : ("cm".equalsIgnoreCase(unit) ? " cm" : "");
+            for (Map.Entry<String, Object> entry : map.entrySet()) {
+                if (entry.getValue() != null && !entry.getValue().toString().isBlank()) {
+                    if (entry.getValue() instanceof Map<?,?> sub) {
+                        List<String> subParts = new ArrayList<>();
+                        for (Map.Entry<?,?> subEntry : sub.entrySet()) {
+                            if (subEntry.getValue() != null && !subEntry.getValue().toString().isBlank()) {
+                                String subKey = slipLabelOrTitle(String.valueOf(subEntry.getKey()));
+                                subParts.add(subKey + ": " + subEntry.getValue().toString().trim() + unitSuffix);
+                            }
+                        }
+                        if (!subParts.isEmpty()) {
+                            parts.add("[" + slipLabelOrTitle(entry.getKey()) + "] " + String.join(", ", subParts));
+                        }
+                    } else {
+                        String key = slipLabelOrTitle(entry.getKey());
+                        parts.add(key + ": " + entry.getValue().toString().trim() + unitSuffix);
+                    }
+                }
+            }
+            return String.join("  ·  ", parts);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private String slipLabelOrTitle(String key) {
+        if (key == null || key.isBlank()) return "";
+        return switch (key) {
+            case "upperChest" -> "Upper Chest";
+            case "bodyLength" -> "Body Length";
+            case "backLength" -> "Back Length";
+            case "frontLength" -> "Front Length";
+            case "falsePar" -> "False Par";
+            case "churidarBlouse" -> "CHURIDAR / BLOUSE";
+            case "pant" -> "PANT";
+            case "sesto" -> "Sesto";
+            case "pet" -> "Pet";
+            case "put" -> "Put";
+            case "thai" -> "Thai";
+            case "high" -> "High";
+            case "fittings" -> "Fittings";
+            default -> camelOrSnakeToTitle(key);
+        };
+    }
+
+    private String camelOrSnakeToTitle(String key) {
+        if (key == null || key.isBlank()) return "";
+        StringBuilder sb = new StringBuilder();
+        boolean newWord = true;
+        for (int i = 0; i < key.length(); i++) {
+            char c = key.charAt(i);
+            if (c == '_' || c == '-') {
+                sb.append(' ');
+                newWord = true;
+            } else if (Character.isUpperCase(c)) {
+                sb.append(' ').append(c);
+                newWord = false;
+            } else {
+                if (newWord) {
+                    sb.append(Character.toUpperCase(c));
+                    newWord = false;
+                } else {
+                    sb.append(c);
+                }
+            }
+        }
+        return sb.toString().trim();
     }
 }

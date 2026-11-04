@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Customer e-Bill | Jolly Ladies Tailor</title>
-  <link rel="icon" type="image/png" href="/images/jolly-ladies-tailor-logo.png">
+  <link rel="icon" type="image/png" href="/images/favicon.png">
   <link rel="stylesheet" href="/css/site.css">
   <style>
     body { background: #fdf8fc; padding: 20px 12px; }
@@ -14,7 +14,8 @@
     .bill-header p { margin: 6px 0 0 0; font-size: 14px; opacity: 0.9; }
     .bill-body { padding: 24px; }
     .bill-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px dashed #d9bcd7; font-size: 14px; line-height: 1.6; }
-    .bill-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 16px 0; border: 1px solid #ebd3e8; border-radius: 12px; }
+    .bill-table { width: 100%; border-collapse: collapse; margin: 0; }
     .bill-table th { background: #f7ebf6; color: var(--violet); padding: 10px 12px; text-align: left; font-size: 13px; font-weight: 700; border-bottom: 1px solid #e0c2de; }
     .bill-table td { padding: 12px; border-bottom: 1px solid #f0e2ef; font-size: 14px; }
     .totals-box { margin-top: 16px; margin-left: auto; max-width: 280px; font-size: 14px; line-height: 1.8; }
@@ -22,6 +23,17 @@
     .totals-row.grand { font-size: 17px; font-weight: 700; color: var(--violet); border-top: 2px solid var(--violet); padding-top: 6px; margin-top: 4px; }
     .totals-row.due { font-size: 16px; font-weight: 700; color: #b30000; border-top: 1px dashed #d9bcd7; padding-top: 4px; margin-top: 4px; }
     .bill-actions { display: flex; justify-content: center; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+    @media (max-width: 600px) {
+      body { padding: 10px 8px; }
+      .bill-body { padding: 16px; }
+      .bill-header { padding: 20px 16px; }
+      .bill-header h1 { font-size: 22px; }
+      .bill-meta { flex-direction: column; gap: 12px; }
+      .bill-meta div:last-child { text-align: left !important; }
+      .totals-box { max-width: 100%; margin-left: 0; }
+      .bill-actions { flex-direction: column; align-items: stretch; }
+      .bill-actions .btn { width: 100%; text-align: center; justify-content: center; }
+    }
     @media print {
       body { background: #fff; padding: 0; }
       .bill-container { border: none; box-shadow: none; max-width: 100%; }
@@ -34,7 +46,9 @@
 
 <div class="bill-container">
   <div class="bill-header">
-    <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Official Sewing Machine Logo" class="bill-logo">
+    <a id="billLogoLink" href="/" style="display:inline-block;cursor:pointer" title="Jolly Ladies Tailor">
+      <img src="/images/jolly-ladies-tailor-logo.png" alt="Jolly Ladies Tailor Official Sewing Machine Logo" class="bill-logo">
+    </a>
     <h1 id="shopName">Jolly Ladies Tailor</h1>
     <p id="shopAddress">Custom Ladies Tailoring & Alteration Specialist</p>
     <p id="shopContact" style="font-size:13px;margin-top:4px"></p>
@@ -60,18 +74,31 @@
         </div>
       </div>
 
+      <!-- Attached Measurements Slip -->
+      <div id="billMeasurementsCard" class="hidden" style="margin:0 0 20px 0;border:1.5px solid #ebd3e8;border-radius:12px;padding:16px;background:#fdf8fc">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #ebd3e8;padding-bottom:6px">
+          <strong style="color:var(--violet);font-size:15px;display:flex;align-items:center;gap:6px">
+            <span>📐</span> Customer Tailoring Measurement Slip
+          </strong>
+          <span class="muted" style="font-size:12px">Workshop Cutting Profile</span>
+        </div>
+        <div id="billMeasurementsList"></div>
+      </div>
+
       <div class="divider-title">Order Items</div>
-      <table class="bill-table">
-        <thead>
-          <tr>
-            <th>Item / Service</th>
-            <th style="text-align:center">Qty</th>
-            <th style="text-align:right">Unit Rate</th>
-            <th style="text-align:right">Amount</th>
-          </tr>
-        </thead>
-        <tbody id="itemsBody"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="bill-table">
+          <thead>
+            <tr>
+              <th>Item / Service</th>
+              <th style="text-align:center">Qty</th>
+              <th style="text-align:right">Unit Rate</th>
+              <th style="text-align:right">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="itemsBody"></tbody>
+        </table>
+      </div>
 
       <div class="totals-box">
         <div class="totals-row"><span>Subtotal:</span><span id="billSubtotal">₹0.00</span></div>
@@ -94,17 +121,19 @@
 
       <div id="paymentsSection" class="hidden" style="margin-top:24px">
         <div class="divider-title">Payment Receipts</div>
-        <table class="bill-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Type</th>
-              <th>Method</th>
-              <th style="text-align:right">Amount</th>
-            </tr>
-          </thead>
-          <tbody id="paymentsBody"></tbody>
-        </table>
+        <div class="table-wrap">
+          <table class="bill-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Method</th>
+                <th style="text-align:right">Amount</th>
+              </tr>
+            </thead>
+            <tbody id="paymentsBody"></tbody>
+          </table>
+        </div>
       </div>
 
       <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid #ebd3e8;font-size:13px;color:#666">
@@ -114,9 +143,35 @@
 
       <div class="bill-actions no-print">
         <a id="downloadPdfBtn" class="btn" href="#" download>📄 Download Official PDF</a>
-        <button class="btn" onclick="window.print()">🖨️ Print Invoice</button>
-        <a id="shopWaBtn" class="btn orange" href="#" target="_blank" rel="noopener">💬 Chat with Shop on WhatsApp</a>
-        <a class="btn light" href="/">← Return to Shop Website</a>
+        <button id="tailorWaShareBtn" class="btn orange" type="button" onclick="shareBillOnWhatsApp()">📲 Share on WhatsApp (Tailor)</button>
+        <button class="btn light" onclick="window.print()">🖨️ Print Invoice</button>
+        <a id="shopWaBtn" class="btn ghost" href="#" target="_blank" rel="noopener">💬 Chat with Shop</a>
+        <a id="returnWorkspaceBtn" class="btn light" href="/">← Return to Shop Website</a>
+      </div>
+
+      <!-- Tailor WhatsApp Guidance & Attachment Explanation -->
+      <div id="tailorWaInfoBox" class="tailor-instructions-card no-print" style="margin-top:20px;background:#fef8fc;border:1.5px dashed #e7b0de;border-radius:12px;padding:16px;text-align:left;font-size:13px;line-height:1.6">
+        <div style="font-weight:700;color:var(--violet);margin-bottom:6px;display:flex;align-items:center;gap:6px">
+          <span style="font-size:16px">📌</span> Tailor Instructions for WhatsApp Sharing
+        </div>
+        <ol style="margin:0 0 0 18px;padding:0;color:#444">
+          <li>Click <strong>Download Official PDF</strong> above to save the print-ready invoice to your device.</li>
+          <li>Click <strong>Share on WhatsApp</strong> to open WhatsApp with the customer containing the bill ID and summary.</li>
+          <li><strong>Important:</strong> Manually attach the downloaded PDF invoice before sending. <em>(WhatsApp does not allow websites to automatically attach files to chats.)</em></li>
+        </ol>
+        <div id="waUrlNotice" style="margin-top:8px;font-size:11px;color:#786b7a"></div>
+
+        <!-- WhatsApp Handoff Confirmation Box -->
+        <div id="waHandoffCard" class="no-print" style="margin-top:14px;background:#eefbf3;border:1.5px solid #a3e6be;border-radius:10px;padding:14px;display:none">
+          <div style="font-weight:700;color:#18643d;margin-bottom:6px">💬 WhatsApp Chat Opened</div>
+          <p style="margin:0 0 10px 0;font-size:13px;color:#2e6040">
+            Please attach the downloaded PDF invoice in WhatsApp and send the message to the customer. When done, confirm below:
+          </p>
+          <button id="confirmWaSentBtn" type="button" class="btn" style="background:#18643d;color:#fff;border-color:#18643d" onclick="confirmWhatsAppHandoff()">
+            ✓ Confirm WhatsApp Bill Sent
+          </button>
+        </div>
+        <div id="waConfirmedStatus" class="notice no-print" style="margin-top:12px;background:#e8f8ee;color:#18643d;font-weight:700;display:none"></div>
       </div>
     </div>
   </div>
@@ -181,6 +236,50 @@
           ? '<span class="pill" style="background:#eedaf7;color:#591873">Refunded</span>'
           : '<span class="pill orange">Payment Due</span>'));
 
+    // Render measurements
+    const SLIP_LABELS = {
+      length: 'Length', chest: 'Chest', upperChest: 'Upper Chest', pet: 'Pet', put: 'Put',
+      hand: 'Hand', cup: 'Cup', neck: 'Neck', sesto: 'Sesto', fittings: 'Fittings',
+      bodyLength: 'Body Length', underarm: 'Underarm', backLength: 'Back Length',
+      frontLength: 'Front Length', width: 'Width', falsePar: 'False Par',
+      waist: 'Waist', hip: 'Hip', high: 'High', thai: 'Thai', bottom: 'Bottom',
+      pant_length: 'Length (Pant)', pant_waist: 'Waist', pant_hip: 'Hip',
+      pant_high: 'High', pant_thai: 'Thai', pant_bottom: 'Bottom', pant_underarm: 'Underarm (Pant)'
+    };
+    const mList = bill.measurements && bill.measurements.length ? bill.measurements : (bill.measurement ? [bill.measurement] : []);
+    const measCard = document.getElementById('billMeasurementsCard');
+    const measList = document.getElementById('billMeasurementsList');
+    if (measCard && measList) {
+      if (mList.length > 0) {
+        measCard.classList.remove('hidden');
+        measList.innerHTML = mList.map(m => {
+          let dims = {};
+          try {
+            dims = typeof m.dimensions === 'string' ? JSON.parse(m.dimensions) : (m.dimensions || {});
+          } catch (_) {}
+          return `
+            <div style="margin-bottom:12px;padding:12px;background:#fff;border:1px solid #ebd3e8;border-radius:8px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:4px">
+                <strong style="color:var(--violet);font-size:14px">📐 ${escapeHTML(m.garment_type)}</strong>
+                <span class="muted" style="font-size:12px">Unit: <strong>${escapeHTML(m.unit || 'in')}</strong> ${m.fit_preference ? `· Fit: <strong>${escapeHTML(m.fit_preference)}</strong>` : ''}</span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:8px">
+                ${Object.entries(dims).map(([k, v]) => `
+                  <div style="background:#fcf5fb;padding:6px 8px;border-radius:6px;font-size:12px;border:1px solid #ebd3e8">
+                    <span class="muted" style="display:block;font-size:11px">${escapeHTML(SLIP_LABELS[k] || k)}</span>
+                    <strong style="color:var(--violet)">${escapeHTML(String(v))} ${escapeHTML(m.unit || 'in')}</strong>
+                  </div>
+                `).join('')}
+              </div>
+              ${m.notes ? `<div class="muted" style="font-size:12px;margin-top:8px;font-style:italic">Notes: ${escapeHTML(m.notes)}</div>` : ''}
+            </div>
+          `;
+        }).join('');
+      } else {
+        measCard.classList.add('hidden');
+      }
+    }
+
     // Items
     const items = bill.items || [];
     document.getElementById('itemsBody').innerHTML = items.map(item => `
@@ -240,6 +339,38 @@
       pdfBtn.download = `invoice-${bill.order_number || 'bill'}.pdf`;
     }
 
+    window.activeBillData = { ...bill, id: id };
+
+    // Setup public bill URL & tailor WhatsApp info notice
+    const configuredBase = bill.public_base_url || bill.shop?.public_base_url || '';
+    let billLink = null;
+    if (configuredBase && !configuredBase.includes('localhost') && !configuredBase.includes('127.0.0.1')) {
+      billLink = `${configuredBase.replace(/\/+$/, '')}/bill.html?id=${encodeURIComponent(id)}`;
+    } else if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      billLink = `${location.origin}/bill.html?id=${encodeURIComponent(id)}`;
+    }
+    const noticeEl = document.getElementById('waUrlNotice');
+    if (noticeEl) {
+      if (billLink) {
+        noticeEl.innerHTML = `🔗 <strong>Public Bill Link:</strong> <a href="${escapeHTML(billLink)}" target="_blank" rel="noopener">${escapeHTML(billLink)}</a>`;
+      } else {
+        noticeEl.textContent = 'ℹ️ Note: Running on local development without a configured public URL. The WhatsApp message will contain full bill details in text instead of a local link. Please attach the downloaded PDF.';
+      }
+    }
+
+    // Role-Aware Navigation: Preserve user role when navigating via logo or return button
+    API.get('/api/auth/me').then(me => {
+      const logoLink = document.getElementById('billLogoLink');
+      const returnBtn = document.getElementById('returnWorkspaceBtn');
+      if (me && me.role === 'TAILOR') {
+        if (logoLink) logoLink.href = '/tailor.html';
+        if (returnBtn) { returnBtn.href = '/tailor.html'; returnBtn.textContent = '← Return to Tailor Workspace'; }
+      } else if (me && me.role === 'ADMIN') {
+        if (logoLink) logoLink.href = '/admin.html';
+        if (returnBtn) { returnBtn.href = '/admin.html'; returnBtn.textContent = '← Return to Admin Console'; }
+      }
+    }).catch(() => {});
+
   } catch (err) {
     document.getElementById('loading').hidden = true;
     const errEl = document.getElementById('error');
@@ -247,6 +378,91 @@
     errEl.hidden = false;
   }
 })();
+
+function shareBillOnWhatsApp() {
+  const bill = window.activeBillData;
+  if (!bill) {
+    alert('Bill data is not yet loaded.');
+    return;
+  }
+
+  let rawPhone = bill.customer_phone_unmasked || '';
+  if (!rawPhone) {
+    const urlParams = new URLSearchParams(window.location.search);
+    rawPhone = urlParams.get('phone') || '';
+  }
+  if (!rawPhone || rawPhone.includes('X')) {
+    rawPhone = prompt('Please enter customer 10-digit mobile number for WhatsApp sharing:', '');
+  }
+
+  const phoneDigits = whatsappDigits(rawPhone);
+  if (!phoneDigits || phoneDigits.length < 10) {
+    alert('A valid customer phone number is required to open WhatsApp.');
+    return;
+  }
+
+  const configuredBase = bill.public_base_url || bill.shop?.public_base_url || '';
+  let billLink = null;
+  if (configuredBase && !configuredBase.includes('localhost') && !configuredBase.includes('127.0.0.1')) {
+    billLink = `${configuredBase.replace(/\/+$/, '')}/bill.html?id=${encodeURIComponent(bill.id || '')}`;
+  } else if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    billLink = `${location.origin}/bill.html?id=${encodeURIComponent(bill.id || '')}`;
+  }
+
+  const items = bill.items || [];
+  const itemsText = items.map(it => `• ${it.item_name} (Qty: ${it.quantity}) - ${money(it.amount)}`).join('\n');
+
+  let balanceText = `Balance Due (this Bill): ${money(bill.due)}`;
+  const prevDue = Number(bill.previous_orders_due || 0);
+  const overallDue = Number(bill.overall_customer_due || bill.due || 0);
+  if (prevDue > 0) {
+    balanceText += `\nPrevious Outstanding: ${money(prevDue)}\nTotal Outstanding Balance: ${money(overallDue)}`;
+  }
+
+  const dueD = bill.due_date ? new Date(bill.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'As agreed';
+
+  let linkText = '';
+  if (billLink) {
+    linkText = `\n\nView and download your digital e-bill online:\n${billLink}`;
+  } else {
+    linkText = `\n\n(Please find your official bill summary above. Kindly refer to the attached PDF invoice for your itemized receipt)`;
+  }
+
+  const msg = `Namaste ${bill.customer_name || 'Customer'}! 🙏\nYour stitching bill from Jolly Ladies Tailor is ready.\n\n• Bill ID: ${bill.order_number}\n\nItems:\n${itemsText}\n\nTotal for this Bill: ${money(bill.total)}\nAmount Paid: ${money(bill.amount_paid)}\n${balanceText}\nPromised Delivery: ${dueD}${linkText}\n\nThank you for choosing Jolly Ladies Tailor!\nSouthern Avenue, Kolkata · 📞 ${bill.shop?.phone || '9748546778'}`;
+
+  // If local development with no public URL, download the official PDF invoice automatically
+  if (!billLink) {
+    const pdfBtn = document.getElementById('downloadPdfBtn');
+    if (pdfBtn && pdfBtn.href) {
+      const dl = document.createElement('a');
+      dl.href = pdfBtn.href;
+      dl.download = pdfBtn.getAttribute('download') || `invoice-${bill.order_number || 'bill'}.pdf`;
+      document.body.appendChild(dl);
+      dl.click();
+      document.body.removeChild(dl);
+    }
+  }
+
+  const waUrl = `https://wa.me/${phoneDigits}?text=${encodeURIComponent(msg)}`;
+  window.open(waUrl, '_blank', 'noopener,noreferrer');
+
+  // Reveal WhatsApp Handoff Confirmation Box — do not mark bill sent until tailor confirms
+  const handoffCard = document.getElementById('waHandoffCard');
+  if (handoffCard) handoffCard.style.display = 'block';
+  const confirmedNotice = document.getElementById('waConfirmedStatus');
+  if (confirmedNotice) confirmedNotice.style.display = 'none';
+}
+
+function confirmWhatsAppHandoff() {
+  const handoffCard = document.getElementById('waHandoffCard');
+  if (handoffCard) handoffCard.style.display = 'none';
+  const confirmedNotice = document.getElementById('waConfirmedStatus');
+  if (confirmedNotice) {
+    const timeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    confirmedNotice.textContent = `✓ Tailor confirmed: Bill handoff sent via WhatsApp at ${timeStr}.`;
+    confirmedNotice.style.display = 'block';
+  }
+}
 </script>
 </body>
 </html>

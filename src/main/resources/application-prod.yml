@@ -2,6 +2,10 @@ server:
   port: ${PORT:8080}
   address: 0.0.0.0
   forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        secure: true
 
 spring:
   datasource:
@@ -24,6 +28,7 @@ spring:
       mode: never
 
 app:
+  public-base-url: ${APP_PUBLIC_BASE_URL:}
   bootstrap:
     admin-username: ${BOOTSTRAP_ADMIN_USERNAME:}
     admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}

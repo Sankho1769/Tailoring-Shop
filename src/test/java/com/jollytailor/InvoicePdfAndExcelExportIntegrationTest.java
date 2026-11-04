@@ -3,6 +3,7 @@ package com.jollytailor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.*;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -175,13 +176,13 @@ class InvoicePdfAndExcelExportIntegrationTest {
     }
 
     @Test
-    @DisplayName("Excel Export: Generates genuine .xlsx workbook with all 9 sheets, headers, and formula protection")
+    @DisplayName("Excel Export: Generates genuine .xlsx workbook with all sheets, headers, frozen panes, and security protection")
     @WithMockUser(username = "admin", roles = {"ADMIN"})
     void testExcelExportWorkflow() throws Exception {
         byte[] excelBytes = mockMvc.perform(get("/api/admin/reports/export-excel"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", is("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")))
-                .andExpect(header().string("Content-Disposition", containsString("jolly-ladies-tailor-data-")))
+                .andExpect(header().string("Content-Disposition", containsString("jolly-ladies-tailor-")))
                 .andReturn().getResponse().getContentAsByteArray();
 
         assertNotNull(excelBytes);
@@ -196,7 +197,12 @@ class InvoicePdfAndExcelExportIntegrationTest {
                     "Payments",
                     "Measurements",
                     "Products & Inventory",
+                    "Categories",
                     "Services & Rates",
+                    "Staff Directory",
+                    "Staff Work",
+                    "Staff Payments",
+                    "Shop Settings",
                     "Customer Enquiries",
                     "Summary"
             );
@@ -209,21 +215,183 @@ class InvoicePdfAndExcelExportIntegrationTest {
                 assertTrue(headerRow.getPhysicalNumberOfCells() > 0, "Sheet " + sheetName + " header row must not be empty");
             }
 
+            // Verify Staff Directory sheet NEVER exposes password hashes or secrets
+            Sheet staffSheet = workbook.getSheet("Staff Directory");
+            assertNotNull(staffSheet);
+            Row staffHeader = staffSheet.getRow(0);
+            for (int c = 0; c < staffHeader.getLastCellNum(); c++) {
+                String heading = staffHeader.getCell(c).getStringCellValue().toLowerCase();
+                assertFalse(heading.contains("password"), "Staff Directory sheet must NEVER include password columns");
+                assertFalse(heading.contains("hash"), "Staff Directory sheet must NEVER include password hash columns");
+                assertFalse(heading.contains("secret"), "Staff Directory sheet must NEVER include secret columns");
+            }
+
             // Verify Summary sheet has calculations
             Sheet summarySheet = workbook.getSheet("Summary");
             boolean hasCustomerMetric = false;
             boolean hasOrderMetric = false;
+            boolean hasStaffMetric = false;
             for (int r = 1; r <= summarySheet.getLastRowNum(); r++) {
                 Row row = summarySheet.getRow(r);
                 if (row != null && row.getCell(0) != null) {
                     String metricName = row.getCell(0).getStringCellValue();
                     if (metricName.contains("Total Registered Customers")) hasCustomerMetric = true;
                     if (metricName.contains("Total Tailoring Orders")) hasOrderMetric = true;
+                    if (metricName.contains("Active Staff Members")) hasStaffMetric = true;
                 }
             }
             assertTrue(hasCustomerMetric, "Summary must include customer count metric");
             assertTrue(hasOrderMetric, "Summary must include orders count metric");
+            assertTrue(hasStaffMetric, "Summary must include active staff count metric");
         }
+    }
+
+    @Test
+    @DisplayName("Staff Work & Actual Payments: Work recording, payment disbursement, partial payments, and ledger balance calculation")
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void testStaffWorkAndPaymentLedger() throws Exception {
+        String testUser = "artisan_" + System.currentTimeMillis();
+        // 1. Create a staff member
+        Map<String, Object> createStaffReq = Map.of(
+                "username", testUser,
+                "fullName", "Ramesh Kar (Master Embroiderer)",
+                "role", "TAILOR",
+                "password", "ArtisanSecurePass123!"
+        );
+        String staffRes = mockMvc.perform(post("/api/admin/staff")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(createStaffReq)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        Map<?, ?> createdStaff = mapper.readValue(staffRes, Map.class);
+        Long staffId = ((Number) createdStaff.get("id")).longValue();
+
+        // 2. Initial ledger check: zero earned, zero paid, zero balance
+        mockMvc.perform(get("/api/admin/staff/" + staffId + "/ledger"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalEarned", is(0)))
+                .andExpect(jsonPath("$.totalPaid", is(0)))
+                .andExpect(jsonPath("$.remainingBalance", is(0)))
+                .andExpect(jsonPath("$.workHistory", hasSize(0)))
+                .andExpect(jsonPath("$.paymentHistory", hasSize(0)));
+
+        // 3. Record Work Entry 1: Bridal blouse embroidery Rs. 1500.00
+        Map<String, Object> work1 = Map.of(
+                "workDate", LocalDate.now().toString(),
+                "description", "Bridal blouse zardozi & pearl handwork",
+                "amountOwed", new BigDecimal("1500.00"),
+                "notes", "Order #JLT-B101"
+        );
+        mockMvc.perform(post("/api/admin/staff/" + staffId + "/work")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(work1)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.amountOwed", is(1500.00)));
+
+        // 4. Record Work Entry 2: Anarkali alteration Rs. 400.00
+        Map<String, Object> work2 = Map.of(
+                "workDate", LocalDate.now().toString(),
+                "description", "Anarkali length alteration & kali fitting",
+                "amountOwed", new BigDecimal("400.00")
+        );
+        mockMvc.perform(post("/api/admin/staff/" + staffId + "/work")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(work2)))
+                .andExpect(status().isCreated());
+
+        // 5. Verify accumulated work: total earned = 1900.00, total paid = 0, balance = 1900.00
+        mockMvc.perform(get("/api/admin/staff/" + staffId + "/ledger"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalEarned", is(1900.00)))
+                .andExpect(jsonPath("$.totalPaid", is(0)))
+                .andExpect(jsonPath("$.remainingBalance", is(1900.00)))
+                .andExpect(jsonPath("$.workHistory", hasSize(2)));
+
+        // 6. Record Partial Payment 1: Cash Rs. 700.00
+        Map<String, Object> pay1 = Map.of(
+                "paymentDate", LocalDate.now().toString(),
+                "amount", new BigDecimal("700.00"),
+                "paymentMethod", "CASH",
+                "notes", "First weekly partial disbursement"
+        );
+        mockMvc.perform(post("/api/admin/staff/" + staffId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(pay1)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.amount", is(700.00)));
+
+        // 7. Verify balance after partial payment: earned 1900, paid 700, remaining 1200
+        mockMvc.perform(get("/api/admin/staff/" + staffId + "/ledger"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalEarned", is(1900.00)))
+                .andExpect(jsonPath("$.totalPaid", is(700.00)))
+                .andExpect(jsonPath("$.remainingBalance", is(1200.00)))
+                .andExpect(jsonPath("$.paymentHistory", hasSize(1)));
+
+        // 8. Record Partial Payment 2: UPI Rs. 500.00
+        Map<String, Object> pay2 = Map.of(
+                "paymentDate", LocalDate.now().toString(),
+                "amount", new BigDecimal("500.00"),
+                "paymentMethod", "UPI",
+                "reference", "UPI-TXN-887766"
+        );
+        mockMvc.perform(post("/api/admin/staff/" + staffId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(pay2)))
+                .andExpect(status().isCreated());
+
+        // 9. Verify balance after second payment: earned 1900, paid 1200, remaining 700
+        mockMvc.perform(get("/api/admin/staff/" + staffId + "/ledger"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalEarned", is(1900.00)))
+                .andExpect(jsonPath("$.totalPaid", is(1200.00)))
+                .andExpect(jsonPath("$.remainingBalance", is(700.00)))
+                .andExpect(jsonPath("$.paymentHistory", hasSize(2)));
+
+        // 10. Validation tests:
+        // Negative amount owed must be rejected (400 Bad Request)
+        mockMvc.perform(post("/api/admin/staff/" + staffId + "/work")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("description", "Invalid work", "amountOwed", -100))))
+                .andExpect(status().isBadRequest());
+
+        // Zero or negative payment amount must be rejected (400 Bad Request)
+        mockMvc.perform(post("/api/admin/staff/" + staffId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 0, "paymentMethod", "CASH"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Staff Payroll Security: Non-admin users are strictly forbidden from viewing or recording payroll")
+    @WithMockUser(username = "tailor1", roles = {"TAILOR"})
+    void testStaffPayrollSecurity() throws Exception {
+        // Tailor role must be forbidden from accessing staff ledger
+        mockMvc.perform(get("/api/admin/staff/1/ledger"))
+                .andExpect(status().isForbidden());
+
+        // Tailor role must be forbidden from recording staff work
+        mockMvc.perform(post("/api/admin/staff/1/work")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("description", "Hack", "amountOwed", 100))))
+                .andExpect(status().isForbidden());
+
+        // Tailor role must be forbidden from recording staff payments
+        mockMvc.perform(post("/api/admin/staff/1/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("amount", 100, "paymentMethod", "CASH"))))
+                .andExpect(status().isForbidden());
     }
 
     @Test

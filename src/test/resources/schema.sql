@@ -116,3 +116,54 @@ CREATE TABLE IF NOT EXISTS payments (
   received_by BIGINT REFERENCES app_users(id),
   received_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS staff_work (
+  id UUID PRIMARY KEY,
+  staff_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  order_id UUID REFERENCES tailoring_orders(id) ON DELETE SET NULL,
+  work_date DATE NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  amount_owed NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (amount_owed >= 0),
+  notes TEXT,
+  recorded_by BIGINT REFERENCES app_users(id),
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS staff_payments (
+  id UUID PRIMARY KEY,
+  staff_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  work_id UUID REFERENCES staff_work(id) ON DELETE CASCADE,
+  payment_date DATE NOT NULL,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  payment_method VARCHAR(50) NOT NULL DEFAULT 'CASH',
+  reference VARCHAR(160),
+  notes TEXT,
+  recorded_by BIGINT REFERENCES app_users(id),
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE staff_payments ADD COLUMN IF NOT EXISTS work_id UUID REFERENCES staff_work(id) ON DELETE CASCADE;
+
+CREATE TABLE IF NOT EXISTS fittings (
+  id UUID PRIMARY KEY,
+  booking_ref VARCHAR(32) NOT NULL UNIQUE,
+  customer_name VARCHAR(160) NOT NULL,
+  phone VARCHAR(30) NOT NULL,
+  email VARCHAR(160),
+  service_type VARCHAR(140) NOT NULL,
+  booking_date DATE NOT NULL,
+  time_slot VARCHAR(60) NOT NULL,
+  notes TEXT,
+  status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_fittings_booking_date ON fittings(booking_date);
+CREATE INDEX IF NOT EXISTS idx_fittings_status ON fittings(status);
+CREATE INDEX IF NOT EXISTS idx_fittings_phone ON fittings(phone);
+
+
+
+
+ALTER TABLE tailoring_orders ADD COLUMN IF NOT EXISTS measurement_ids TEXT;

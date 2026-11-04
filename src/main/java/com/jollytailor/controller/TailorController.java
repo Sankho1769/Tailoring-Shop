@@ -10,12 +10,14 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
+import jakarta.annotation.PostConstruct;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -23,16 +25,45 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/tailor")
 public class TailorController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TailorController.class);
+
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final StorageService storage;
     private final InvoicePdfService pdfService;
+
+    @Value("${app.public-base-url:}")
+    private String configPublicBaseUrl;
 
     public TailorController(JdbcTemplate jdbc, ObjectMapper mapper, StorageService storage, InvoicePdfService pdfService) {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.storage = storage;
         this.pdfService = pdfService;
+    }
+
+    @PostConstruct
+    public void initMeasurementColumns() {
+        try {
+            jdbc.execute("ALTER TABLE tailoring_orders ADD COLUMN IF NOT EXISTS measurement_ids TEXT");
+        } catch (Exception e) {
+            log.warn("Could not alter tailoring_orders for measurement_ids: {}", e.getMessage());
+        }
+    }
+
+    private String resolvePublicBaseUrl() {
+        String fromDb = null;
+        try {
+            fromDb = jdbc.queryForObject("SELECT setting_value FROM shop_settings WHERE setting_key='public_base_url'", String.class);
+        } catch (Exception ignored) {}
+        String url = (fromDb != null && !fromDb.isBlank()) ? fromDb.trim() : (configPublicBaseUrl != null ? configPublicBaseUrl.trim() : "");
+        if (!url.isBlank()) {
+            url = url.replaceAll("/+$", "");
+            if (url.contains("localhost") || url.contains("127.0.0.1")) {
+                url = "";
+            }
+        }
+        return url;
     }
 
     public static String normalizePhone(String raw) {
@@ -73,6 +104,7 @@ public class TailorController {
         } else {
             out.put("gpayQrUrl", "/images/jolly-ladies-tailor-qr.jpg");
         }
+        out.put("publicBaseUrl", resolvePublicBaseUrl());
         return out;
     }
 
@@ -202,6 +234,20 @@ public class TailorController {
                 "FROM measurements WHERE customer_id=? ORDER BY created_at DESC", id);
     }
 
+    @GetMapping("/customers/{id}/measurements/{mid}")
+    public Map<String,Object> measurement(@PathVariable UUID id, @PathVariable UUID mid) {
+        if (!customerExists(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found");
+        }
+        try {
+            return jdbc.queryForMap(
+                    "SELECT id, customer_id, garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes, created_at " +
+                    "FROM measurements WHERE id=? AND customer_id=?", mid, id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Measurement not found");
+        }
+    }
+
     @PostMapping("/customers/{id}/measurements")
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String,Object> addMeasurement(@PathVariable UUID id, @RequestBody Map<String,Object> b, Authentication auth) {
@@ -228,6 +274,47 @@ public class TailorController {
         jdbc.update("INSERT INTO measurements(id, customer_id, garment_type, unit, dimensions, fit_preference, notes, created_by) " +
                     "VALUES(?,?,?, ?,CAST(? AS JSONB),?,?,?)",
                 mid, id, garment, unit, json, blank(text(b, "fitPreference")), blank(text(b, "notes")), userId);
+        return jdbc.queryForMap(
+                "SELECT id, customer_id, garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes, created_at " +
+                "FROM measurements WHERE id=?", mid);
+    }
+
+    @RequestMapping(value = {"/customers/{id}/measurements/{mid}", "/measurements/{mid}"}, method = {RequestMethod.PUT, RequestMethod.PATCH})
+    public Map<String,Object> updateMeasurement(@PathVariable(required = false) UUID id, @PathVariable UUID mid, @RequestBody Map<String,Object> b, Authentication auth) {
+        Map<String,Object> existing;
+        try {
+            existing = jdbc.queryForMap("SELECT id, customer_id, garment_type, unit, fit_preference, notes FROM measurements WHERE id=?", mid);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Measurement not found");
+        }
+        if (id != null && !id.equals(existing.get("customer_id"))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Measurement does not belong to specified customer");
+        }
+
+        String garment = b.containsKey("garmentType") ? text(b, "garmentType") : String.valueOf(existing.get("garment_type"));
+        if (garment.isBlank()) garment = String.valueOf(existing.get("garment_type"));
+
+        String unit = b.containsKey("unit") ? text(b, "unit") : String.valueOf(existing.get("unit"));
+        if (!Set.of("in", "cm").contains(unit)) unit = "in";
+
+        String fit = b.containsKey("fitPreference") ? blank(text(b, "fitPreference")) : (String) existing.get("fit_preference");
+        String notes = b.containsKey("notes") ? blank(text(b, "notes")) : (String) existing.get("notes");
+
+        if (b.containsKey("dimensions")) {
+            Object dims = b.get("dimensions");
+            String json;
+            try {
+                json = mapper.writeValueAsString(dims != null ? dims : Map.of());
+            } catch (JsonProcessingException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid measurement values");
+            }
+            jdbc.update("UPDATE measurements SET garment_type=?, unit=?, dimensions=CAST(? AS JSONB), fit_preference=?, notes=? WHERE id=?",
+                    garment, unit, json, fit, notes, mid);
+        } else {
+            jdbc.update("UPDATE measurements SET garment_type=?, unit=?, fit_preference=?, notes=? WHERE id=?",
+                    garment, unit, fit, notes, mid);
+        }
+
         return jdbc.queryForMap(
                 "SELECT id, customer_id, garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes, created_at " +
                 "FROM measurements WHERE id=?", mid);
@@ -268,13 +355,40 @@ public class TailorController {
                 "SELECT p.id, p.amount, p.method, p.reference, p.note, COALESCE(p.payment_type, 'PAYMENT') AS payment_type, p.received_at, u.username AS collector " +
                 "FROM payments p LEFT JOIN app_users u ON u.id = p.received_by WHERE p.order_id=? ORDER BY p.received_at", id));
 
-        Object mId = out.get("measurement_id");
-        if (mId != null) {
-            try {
-                Map<String,Object> mRow = jdbc.queryForMap(
-                        "SELECT garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes FROM measurements WHERE id=?", mId);
-                out.put("measurement", mRow);
-            } catch (Exception ignored) {}
+        List<Map<String,Object>> mRows = new ArrayList<>();
+        try {
+            String mIdsRaw = jdbc.queryForObject("SELECT measurement_ids FROM tailoring_orders WHERE id=?", String.class, id);
+            if (mIdsRaw != null && !mIdsRaw.isBlank()) {
+                for (String part : mIdsRaw.split(",")) {
+                    if (!part.trim().isBlank()) {
+                        try {
+                            UUID mid = UUID.fromString(part.trim());
+                            Map<String,Object> mRow = jdbc.queryForMap(
+                                    "SELECT id, garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes, created_at FROM measurements WHERE id=?", mid);
+                            mRows.add(mRow);
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        if (mRows.isEmpty()) {
+            Object mId = out.get("measurement_id");
+            if (mId != null) {
+                try {
+                    Map<String,Object> mRow = jdbc.queryForMap(
+                            "SELECT id, garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes, created_at FROM measurements WHERE id=?", mId);
+                    mRows.add(mRow);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        if (!mRows.isEmpty()) {
+            out.put("measurement", mRows.get(0));
+            out.put("measurements", mRows);
+        } else {
+            out.put("measurement", null);
+            out.put("measurements", Collections.emptyList());
         }
 
         UUID customerId = (UUID) out.get("customer_id");
@@ -301,15 +415,38 @@ public class TailorController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found");
         }
 
-        UUID measurementId = b.get("measurementId") == null || b.get("measurementId").toString().isBlank()
-                ? null : uuid(b.get("measurementId"), "measurementId");
-        if (measurementId != null) {
+        List<UUID> measurementIdList = new ArrayList<>();
+        if (b.containsKey("measurementIds") && b.get("measurementIds") != null) {
+            Object rawIds = b.get("measurementIds");
+            if (rawIds instanceof List<?> list) {
+                for (Object item : list) {
+                    if (item != null && !item.toString().isBlank()) {
+                        measurementIdList.add(uuid(item, "measurementId"));
+                    }
+                }
+            } else if (rawIds instanceof String str && !str.isBlank()) {
+                for (String part : str.split(",")) {
+                    if (!part.trim().isBlank()) {
+                        measurementIdList.add(uuid(part.trim(), "measurementId"));
+                    }
+                }
+            }
+        }
+        if (measurementIdList.isEmpty() && b.containsKey("measurementId") && b.get("measurementId") != null && !b.get("measurementId").toString().isBlank()) {
+            measurementIdList.add(uuid(b.get("measurementId"), "measurementId"));
+        }
+
+        for (UUID mid : measurementIdList) {
             Integer count = jdbc.queryForObject(
-                    "SELECT COUNT(*) FROM measurements WHERE id=? AND customer_id=?", Integer.class, measurementId, customerId);
+                    "SELECT COUNT(*) FROM measurements WHERE id=? AND customer_id=?", Integer.class, mid, customerId);
             if (count == null || count == 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selected measurement profile does not belong to this customer");
             }
         }
+
+        UUID measurementId = measurementIdList.isEmpty() ? null : measurementIdList.get(0);
+        String measurementIdsJoined = measurementIdList.isEmpty() ? null :
+                measurementIdList.stream().map(UUID::toString).collect(java.util.stream.Collectors.joining(","));
 
         Object raw = b.get("items");
         if (!(raw instanceof List<?> itemList) || itemList.isEmpty()) {
@@ -446,9 +583,9 @@ public class TailorController {
             paymentStatus = advance.compareTo(total) >= 0 ? "PAID" : "PARTIALLY_PAID";
         }
 
-        jdbc.update("INSERT INTO tailoring_orders(id, order_number, customer_id, measurement_id, status, payment_status, due_date, notes, subtotal, discount, total, amount_paid, created_by) " +
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                id, number, customerId, measurementId, "NEW", paymentStatus, dateOrNull(b.get("dueDate")), blank(text(b, "notes")), subtotal, discount, total, amountPaid, uid > 0 ? uid : null);
+        jdbc.update("INSERT INTO tailoring_orders(id, order_number, customer_id, measurement_id, measurement_ids, status, payment_status, due_date, notes, subtotal, discount, total, amount_paid, created_by) " +
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                id, number, customerId, measurementId, measurementIdsJoined, "NEW", paymentStatus, dateOrNull(b.get("dueDate")), blank(text(b, "notes")), subtotal, discount, total, amountPaid, uid > 0 ? uid : null);
 
         for (Map<String,Object> item : prepared) {
             jdbc.update("INSERT INTO order_items(id, order_id, product_id, item_name, quantity, default_rate, unit_rate, discount, amount, adjustment_reason, adjusted_by, adjusted_at) " +
@@ -608,16 +745,40 @@ public class TailorController {
             jdbc.update("UPDATE tailoring_orders SET due_date=?, updated_at=NOW() WHERE id=?", dateOrNull(b.get("dueDate")), id);
         }
 
-        if (b.containsKey("measurementId")) {
-            UUID mid = b.get("measurementId") == null || b.get("measurementId").toString().isBlank()
-                    ? null : uuid(b.get("measurementId"), "measurementId");
-            if (mid != null) {
+        if (b.containsKey("measurementIds") || b.containsKey("measurementId")) {
+            List<UUID> mList = new ArrayList<>();
+            if (b.containsKey("measurementIds") && b.get("measurementIds") != null) {
+                Object rawIds = b.get("measurementIds");
+                if (rawIds instanceof List<?> list) {
+                    for (Object item : list) {
+                        if (item != null && !item.toString().isBlank()) {
+                            mList.add(uuid(item, "measurementId"));
+                        }
+                    }
+                } else if (rawIds instanceof String str && !str.isBlank()) {
+                    for (String part : str.split(",")) {
+                        if (!part.trim().isBlank()) {
+                            mList.add(uuid(part.trim(), "measurementId"));
+                        }
+                    }
+                }
+            }
+            if (mList.isEmpty() && b.containsKey("measurementId") && b.get("measurementId") != null && !b.get("measurementId").toString().isBlank()) {
+                mList.add(uuid(b.get("measurementId"), "measurementId"));
+            }
+
+            for (UUID mid : mList) {
                 Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM measurements WHERE id=? AND customer_id=?", Integer.class, mid, customerId);
                 if (count == null || count == 0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selected measurement profile does not belong to this customer");
                 }
             }
-            jdbc.update("UPDATE tailoring_orders SET measurement_id=?, updated_at=NOW() WHERE id=?", mid, id);
+
+            UUID mid = mList.isEmpty() ? null : mList.get(0);
+            String mIdsJoined = mList.isEmpty() ? null :
+                    mList.stream().map(UUID::toString).collect(java.util.stream.Collectors.joining(","));
+
+            jdbc.update("UPDATE tailoring_orders SET measurement_id=?, measurement_ids=?, updated_at=NOW() WHERE id=?", mid, mIdsJoined, id);
         }
 
         if (b.containsKey("status") && b.get("status") != null && !b.get("status").toString().isBlank()) {
@@ -814,6 +975,33 @@ public class TailorController {
                 newPaid, paymentStatus, id);
 
         return Map.of("id", pid, "orderId", id, "refundAmount", refundAmount, "newAmountPaid", newPaid, "paymentStatus", paymentStatus);
+    }
+
+    @DeleteMapping("/orders/{id}")
+    @Transactional
+    public Map<String,Object> deleteOrder(@PathVariable UUID id, Authentication auth) {
+        Map<String,Object> ord;
+        try {
+            ord = jdbc.queryForMap("SELECT id, order_number, total, amount_paid, status FROM tailoring_orders WHERE id=? FOR UPDATE", id);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found");
+        }
+        String orderNum = String.valueOf(ord.get("order_number"));
+        BigDecimal paid = (BigDecimal) ord.get("amount_paid");
+        Integer payCount = jdbc.queryForObject("SELECT COUNT(*) FROM payments WHERE order_id=?", Integer.class, id);
+
+        // Financial Safety Boundary: Do not silently delete payment records or financial history.
+        if ((paid != null && paid.signum() > 0) || (payCount != null && payCount > 0)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Order " + orderNum + " has recorded payment history (₹" + paid + " across " + payCount + " payment records). " +
+                    "To protect financial audit history and accounting integrity, orders with payments cannot be hard-deleted. " +
+                    "Please cancel or void the order instead.");
+        }
+
+        // Safe deletion of draft / unpaid orders
+        jdbc.update("DELETE FROM order_items WHERE order_id=?", id);
+        jdbc.update("DELETE FROM tailoring_orders WHERE id=?", id);
+        return Map.of("message", "Order " + orderNum + " deleted successfully", "id", id, "orderNumber", orderNum);
     }
 
     private Object itemValue(Map<?,?> m, String key, Object fallback) {
