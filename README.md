@@ -24,7 +24,8 @@ A fully connected tailor shop management system and public consumer boutique for
   - Record initial advance payment and payment method (UPI, Cash, Card) directly on bill creation.
   - Generates unique bill numbers: `JLT-YYYYMMDD-XXXXX`.
   - Immediate printable invoice layout with shop header, itemization, customer details, balance due, and UPI QR code.
-  - **WhatsApp e-Bill Sharing**: Formats a clean itemized summary and opens click-to-chat via `https://wa.me/<phone>?text=...`, along with a quick clipboard copy button.
+  - **Download Official PDF**: Generates a print-ready PDF using the shop branding, full customer & bill details, itemized rates, delivery date, advance paid, and outstanding balances.
+  - **WhatsApp e-Bill Sharing**: Formats an itemized summary and opens click-to-chat via `https://wa.me/<phone>?text=...` with public bill URL (omits `localhost` in local development) and guidance for tailor to attach the downloaded PDF.
 - **Order Lifecycle Tracking**: Seamlessly advance orders through:
   `New` ➔ `In Progress` ➔ `Trial` ➔ `Ready` ➔ `Delivered` (or `Cancelled`).
 - **Payment & Refund Tracking**:
@@ -44,7 +45,13 @@ A fully connected tailor shop management system and public consumer boutique for
 - **Payment Ledger & Audit Log**: Itemized transaction log of every payment and refund with date, customer, collector, payment method, and transaction reference.
 - **Service & Category Catalog Management**: Add services, update default stitching rates, activate/deactivate services, and upload catalog photos.
 - **Supabase Storage Integration**: Upload product catalog images and the public GPay QR code securely through backend S3 credentials.
-- **Staff User Accounts**: Create accounts with role `TAILOR` or `ADMIN`, toggle active status, change roles, and reset passwords (enforcing minimum 12 characters).
+- **Staff User Accounts & Compensation Ledger**:
+  - Create accounts with role `TAILOR` or `ADMIN`, toggle active status, change roles, and reset passwords (enforcing minimum 12 characters).
+  - Track individual staff work records (earned amounts, garment/order descriptions, notes).
+  - Maintain an auditable payment ledger (payments disbursed, payment methods, transaction references).
+  - Real-time balance calculations: Total Earned, Total Paid, and Balance Owed.
+- **One-Click Comprehensive Excel Export**:
+  - Full shop backup in a single styled `.xlsx` workbook with 14 separate sheets covering customers, measurements, orders, order items, payments, products, categories, services & rates, staff directory (excluding passwords), staff work, staff payments, shop settings, enquiries, and summary KPI analytics.
 - **One-Click CSV Exports**:
   - Summary KPI report CSV.
   - All orders CSV (`/api/admin/reports/orders-csv`).
@@ -128,6 +135,7 @@ docker compose exec -T postgres pg_dump -U jolly_app -d jolly_tailor > jolly_tai
 - **Authentication**: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`, `GET /api/auth/csrf`
 - **Public**:
   - `GET /api/public/shop`, `GET /api/public/categories`, `GET /api/public/products`
+  - `GET /api/public/bills/{id}`, `GET /api/public/bills/{id}/pdf`
   - `POST /api/public/booking-requests`
 - **Tailor Workspace (TAILOR or ADMIN)**:
   - `GET/POST /api/tailor/customers`, `GET/PATCH /api/tailor/customers/{id}`
@@ -139,7 +147,9 @@ docker compose exec -T postgres pg_dump -U jolly_app -d jolly_tailor > jolly_tai
   - `GET /api/admin/stats`, `GET/PUT /api/admin/shop-settings`
   - `GET /api/admin/customers`, `GET /api/admin/customers/{id}/orders`
   - `GET /api/admin/payments`
+  - `GET /api/admin/reports/all-data.xlsx` (full 14-sheet workbook)
   - `GET /api/admin/reports/orders-csv`, `GET /api/admin/reports/payments-csv`, `GET /api/admin/reports/customers-csv`
+  - `GET /api/admin/staff`, `GET /api/admin/staff/{id}/ledger`, `POST /api/admin/staff/{id}/work`, `POST /api/admin/staff/{id}/payments`
   - `GET/POST /api/admin/categories`, `DELETE /api/admin/categories/{id}`
   - `GET/POST /api/admin/products`, `PATCH /api/admin/products/{id}`, `POST /api/admin/products/{id}/image`
   - `POST /api/admin/media/shop/gpay-qr`, `POST /api/admin/media/products/{id}`

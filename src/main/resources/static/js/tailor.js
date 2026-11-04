@@ -4,6 +4,22 @@
 // ============================================================================
 
 const measurementDefinitions = {
+  'CHURIDAR / BLOUSE': [
+    'length', 'chest', 'upperChest', 'pet', 'put', 'hand', 'cup', 'neck',
+    'sesto', 'fittings', 'bodyLength', 'underarm', 'backLength', 'frontLength', 'width', 'falsePar'
+  ],
+  'PANT': [
+    'length', 'waist', 'hip', 'high', 'thai', 'bottom', 'underarm'
+  ],
+  'CHURIDAR / BLOUSE & PANT': {
+    'CHURIDAR / BLOUSE': [
+      'length', 'chest', 'upperChest', 'pet', 'put', 'hand', 'cup', 'neck',
+      'sesto', 'fittings', 'bodyLength', 'underarm', 'backLength', 'frontLength', 'width', 'falsePar'
+    ],
+    'PANT': [
+      'length', 'waist', 'hip', 'high', 'thai', 'bottom', 'underarm'
+    ]
+  },
   'Blouse': ['shoulder','bust','upperBust','blouseWaist','blouseLength','sleeveLength','armhole','biceps','wrist','frontNeck','backNeck','apexDistance'],
   'Kurti': ['shoulder','bust','waist','hip','armhole','sleeveLength','kurtiLength','neckDepth'],
   'Salwar / Kameez': ['shoulder','bust','waist','hip','kameezLength','sleeveLength','armhole','neckDepth','salwarLength','thigh','ankle'],
@@ -16,16 +32,72 @@ const measurementDefinitions = {
 };
 
 const labels = {
-  shoulder: 'Shoulder', bust: 'Bust / Chest', upperBust: 'Upper bust', blouseWaist: 'Blouse waist',
-  waist: 'Waist', hip: 'Hip', blouseLength: 'Blouse length', sleeveLength: 'Sleeve length',
-  armhole: 'Armhole', biceps: 'Biceps / Upper arm', wrist: 'Wrist', frontNeck: 'Front neck depth',
-  backNeck: 'Back neck depth', apexDistance: 'Apex distance', kameezLength: 'Kameez length',
-  neckDepth: 'Neck depth', salwarLength: 'Salwar length', thigh: 'Thigh', ankle: 'Ankle opening',
-  rise: 'Rise / crotch', knee: 'Knee', bottom: 'Bottom opening', inseam: 'Inseam', outseam: 'Outseam',
-  pantLength: 'Pant length', frockLength: 'Frock length', lehengaLength: 'Lehenga length', flare: 'Lehenga flare',
-  waistBand: 'Waistband', kurtiLength: 'Kurti length', fullLength: 'Full body length', lengthToAdjust: 'Length to adjust',
-  waistToAdjust: 'Waist adjustment', sareeLength: 'Saree length', sareeWidth: 'Saree width', parLength: 'Par length',
-  pekoEdges: 'Peko edges', notesMeasurement: 'Other measurement'
+  // Jolly Tailor Slip Exact Labels:
+  length: 'Length',
+  chest: 'Chest',
+  upperChest: 'Upper Chest',
+  pet: 'Pet',
+  put: 'Put',
+  hand: 'Hand',
+  cup: 'Cup',
+  neck: 'Neck',
+  sesto: 'Sesto',
+  fittings: 'Fittings',
+  bodyLength: 'Body Length',
+  underarm: 'Underarm',
+  backLength: 'Back Length',
+  frontLength: 'Front Length',
+  width: 'Width',
+  falsePar: 'False Par',
+  waist: 'Waist',
+  hip: 'Hip',
+  high: 'High',
+  thai: 'Thai',
+  bottom: 'Bottom',
+  // Pant compound keys for combined group:
+  pant_length: 'Length (Pant)',
+  pant_waist: 'Waist',
+  pant_hip: 'Hip',
+  pant_high: 'High',
+  pant_thai: 'Thai',
+  pant_bottom: 'Bottom',
+  pant_underarm: 'Underarm (Pant)',
+  // Legacy & specific labels:
+  shoulder: 'Shoulder',
+  bust: 'Bust / Chest',
+  upperBust: 'Upper bust',
+  blouseWaist: 'Blouse waist',
+  blouseLength: 'Blouse length',
+  sleeveLength: 'Sleeve length',
+  armhole: 'Armhole',
+  biceps: 'Biceps / Upper arm',
+  wrist: 'Wrist',
+  frontNeck: 'Front neck depth',
+  backNeck: 'Back neck depth',
+  apexDistance: 'Apex distance',
+  kameezLength: 'Kameez length',
+  neckDepth: 'Neck depth',
+  salwarLength: 'Salwar length',
+  thigh: 'Thigh',
+  ankle: 'Ankle opening',
+  rise: 'Rise / crotch',
+  knee: 'Knee',
+  inseam: 'Inseam',
+  outseam: 'Outseam',
+  pantLength: 'Pant length',
+  frockLength: 'Frock length',
+  lehengaLength: 'Lehenga length',
+  flare: 'Lehenga flare',
+  waistBand: 'Waistband',
+  kurtiLength: 'Kurti length',
+  fullLength: 'Full body length',
+  lengthToAdjust: 'Length to adjust',
+  waistToAdjust: 'Waist adjustment',
+  sareeLength: 'Saree length',
+  sareeWidth: 'Saree width',
+  parLength: 'Par length',
+  pekoEdges: 'Peko edges',
+  notesMeasurement: 'Other measurement'
 };
 
 const ORDER_STATUS_LABELS = {
@@ -47,7 +119,8 @@ let products = [];
 let cart = [];
 let editingOrderId = null;
 let activeOrder = null;
-let selectedGarment = 'Blouse';
+let selectedGarment = 'CHURIDAR / BLOUSE';
+let editingMeasurementId = null;
 let selectedPaymentMethod = 'UPI';
 let shopSettings = {};
 let paymentQrData = {};
@@ -73,6 +146,9 @@ function goToStage(stageNum) {
   }
 
   currentStage = stageNum;
+  if (stageNum === 2) {
+    loadProducts();
+  }
 
   // Update Stepper Nav
   for (let s = 1; s <= 5; s++) {
@@ -151,13 +227,14 @@ async function doLogin(event) {
   event.preventDefault();
   const username = val('username');
   const password = document.getElementById('password') ? document.getElementById('password').value : '';
+  const rememberMe = document.getElementById('rememberMe') ? document.getElementById('rememberMe').checked : true;
   if (!username || !password) {
     setNotice('#loginNotice', 'Please enter your username and password.');
     return;
   }
   try {
     await API.csrf();
-    const who = await API.post('/api/auth/login', { username, password });
+    const who = await API.post('/api/auth/login', { username, password, rememberMe });
     await API.csrf();
     if (!['ADMIN', 'TAILOR'].includes(who.role)) {
       throw new Error('This account does not have tailor workspace permissions.');
@@ -168,6 +245,12 @@ async function doLogin(event) {
     document.getElementById('logout').classList.remove('hidden');
     if (document.getElementById('password')) document.getElementById('password').value = '';
     await loadInitialWorkspace();
+    const urlParams = new URLSearchParams(window.location.search);
+    const selCust = urlParams.get('selectCustomer');
+    if (selCust) {
+      await selectCustomer(selCust);
+      goToStage(2);
+    }
   } catch (e) {
     setNotice('#loginNotice', e.message);
   }
@@ -206,6 +289,19 @@ async function searchCustomers(q = '') {
   }
 }
 
+function maskPhoneNumber(phone) {
+  if (!phone) return '';
+  const str = String(phone).trim();
+  const digits = str.replace(/\D/g, '');
+  if (digits.length <= 4) return str;
+  const last4 = digits.slice(-4);
+  const first2 = digits.length >= 10 ? (digits.startsWith('91') && digits.length === 12 ? digits.slice(2, 4) : digits.slice(0, 2)) : '';
+  if (first2) {
+    return `${first2}••••${last4}`;
+  }
+  return `••••••${last4}`;
+}
+
 function renderCustomerSearchResults(list, query) {
   const grid = document.getElementById('customerResultsGrid');
   const countBadge = document.getElementById('searchResultsCount');
@@ -224,12 +320,10 @@ function renderCustomerSearchResults(list, query) {
   grid.innerHTML = list.map(c => `
     <div class="customer-card ${currentCustomer?.id === c.id ? 'selected' : ''}" onclick="selectCustomer('${c.id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <h3>${escapeHTML(c.name)}</h3>
+        <h3 style="margin:0;font-size:16px;color:var(--violet)">${escapeHTML(c.name)}</h3>
         <span class="pill">Select ›</span>
       </div>
-      <div class="phone">📱 ${escapeHTML(c.phone)}</div>
-      ${c.address ? `<div class="notes">📍 ${escapeHTML(c.address)}</div>` : ''}
-      ${c.notes ? `<div class="notes" style="font-style:italic">💬 ${escapeHTML(c.notes)}</div>` : ''}
+      <div class="phone" style="margin-top:6px;font-size:13px;color:var(--muted);font-weight:600">📱 ${escapeHTML(maskPhoneNumber(c.phone))}</div>
     </div>
   `).join('');
 }
@@ -321,6 +415,7 @@ async function selectCustomer(customerId) {
   try {
     const c = await API.get('/api/tailor/customers/' + customerId);
     currentCustomer = c;
+    window.currentCustomer = c;
 
     // Reset customer drawers
     closeMeasurementDrawer();
@@ -624,7 +719,7 @@ function renderMeasurementsTimeline() {
     const d = new Date(m.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
     let dims = {};
     try { dims = typeof m.dimensions === 'string' ? JSON.parse(m.dimensions) : (m.dimensions || {}); } catch(_) {}
-    const preview = Object.entries(dims).slice(0, 4).map(([k,v]) => `${labels[k]||k}: ${v}`).join(', ') + (Object.keys(dims).length > 4 ? '…' : '');
+    const preview = Object.entries(dims).slice(0, 5).map(([k,v]) => `${labels[k]||k}: ${v}`).join(', ') + (Object.keys(dims).length > 5 ? '…' : '');
 
     return `
       <tr>
@@ -635,6 +730,7 @@ function renderMeasurementsTimeline() {
         <td><small class="muted">${escapeHTML(preview)}</small></td>
         <td>
           <div style="display:flex;gap:6px">
+            <button class="btn ghost btn-sm" type="button" onclick="editMeasurement('${m.id}')">✏️ Edit</button>
             <button class="btn ghost btn-sm" type="button" onclick="copyAndEditMeasurement('${m.id}')">Copy & Edit</button>
             <button class="btn light btn-sm" type="button" onclick="useSnapshotForNewOrder('${m.id}')">Use in Order</button>
           </div>
@@ -643,18 +739,46 @@ function renderMeasurementsTimeline() {
   }).join('');
 }
 
-function openMeasurementForm(garment = 'Blouse', existingDimensions = {}, fit = 'Regular', notes = '') {
-  document.getElementById('measureGarmentSelect').value = garment;
-  document.getElementById('measureFitPref').value = fit || 'Regular';
-  document.getElementById('measureSpecialNotes').value = notes || '';
+function editMeasurement(snapshotId) {
+  const snap = customerMeasurements.find(m => m.id === snapshotId);
+  if (!snap) return;
+  let dims = {};
+  try { dims = typeof snap.dimensions === 'string' ? JSON.parse(snap.dimensions) : (snap.dimensions || {}); } catch(_) {}
+  openMeasurementForm(snap.garment_type, dims, snap.fit_preference, snap.notes, snap.id);
+  setNotice('#measureNotice', `Editing measurement recorded on ${new Date(snap.created_at).toLocaleDateString('en-IN')}. Modifying will update this profile.`, true);
+}
+
+function openMeasurementForm(garment = 'CHURIDAR / BLOUSE', existingDimensions = {}, fit = 'Regular', notes = '', editId = null) {
+  editingMeasurementId = editId || null;
+  const editInp = document.getElementById('editingMeasureId');
+  if (editInp) editInp.value = editId || '';
+
+  const sel = document.getElementById('measureGarmentSelect');
+  if (sel) sel.value = garment;
+  const fitEl = document.getElementById('measureFitPref');
+  if (fitEl) fitEl.value = fit || 'Regular';
+  const notesEl = document.getElementById('measureSpecialNotes');
+  if (notesEl) notesEl.value = notes || '';
+
   drawDynamicMeasurementFields(garment, existingDimensions);
 
-  document.getElementById('measureFormTitle').textContent = `Record ${garment} Measurement Snapshot`;
+  const titleEl = document.getElementById('measureFormTitle');
+  if (titleEl) {
+    titleEl.textContent = editId ? `Edit ${garment} Measurement Profile` : `Record ${garment} Measurement Snapshot`;
+  }
+  const submitBtn = document.querySelector('#recordMeasurementForm button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.textContent = editId ? '💾 Update Measurement Profile' : '💾 Save Measurement Snapshot';
+  }
+
   document.getElementById('measureFormCard').classList.remove('hidden');
   document.getElementById('measureFormCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function closeMeasurementForm() {
+  editingMeasurementId = null;
+  const editInp = document.getElementById('editingMeasureId');
+  if (editInp) editInp.value = '';
   const card = document.getElementById('measureFormCard');
   if (card) card.classList.add('hidden');
   const form = document.getElementById('recordMeasurementForm');
@@ -668,23 +792,56 @@ function copyAndEditMeasurement(snapshotId) {
   if (!snap) return;
   let dims = {};
   try { dims = typeof snap.dimensions === 'string' ? JSON.parse(snap.dimensions) : (snap.dimensions || {}); } catch(_) {}
-  openMeasurementForm(snap.garment_type, dims, snap.fit_preference, snap.notes);
-  setNotice('#measureNotice', `Loaded values from snapshot (${new Date(snap.created_at).toLocaleDateString('en-IN')}). Modify as needed and save.`, true);
+  openMeasurementForm(snap.garment_type, dims, snap.fit_preference, snap.notes, null);
+  setNotice('#measureNotice', `Loaded values from snapshot (${new Date(snap.created_at).toLocaleDateString('en-IN')}). Modify as needed and save as new snapshot.`, true);
 }
 
 function drawDynamicMeasurementFields(garment, existingValues = {}) {
-  const keys = measurementDefinitions[garment] || measurementDefinitions['General body measurements'];
+  const def = measurementDefinitions[garment] || measurementDefinitions['CHURIDAR / BLOUSE'] || measurementDefinitions['General body measurements'];
   const unit = val('measureUnitSelect') === 'in' ? 'Inches' : 'cm';
   const container = document.getElementById('dynamicMeasureFields');
   if (!container) return;
 
-  container.innerHTML = keys.map(k => `
-    <div class="field">
-      <label for="dim_${k}">${escapeHTML(labels[k] || k)}</label>
-      <input id="dim_${k}" data-measure-key="${k}" type="text" inputmode="decimal"
-             placeholder="${unit}" value="${existingValues[k] ? escapeHTML(existingValues[k]) : ''}">
-    </div>
-  `).join('');
+  if (Array.isArray(def)) {
+    container.style.display = 'grid';
+    container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(130px, 1fr))';
+    container.style.gap = '10px';
+    container.innerHTML = def.map(k => {
+      const val = existingValues[k] != null ? existingValues[k] : '';
+      return `
+        <div class="field" style="margin:0">
+          <label for="dim_${k}" style="font-size:12px;font-weight:600">${escapeHTML(labels[k] || k)}</label>
+          <input id="dim_${k}" data-measure-key="${k}" type="text" inputmode="decimal"
+                 placeholder="${unit}" value="${escapeHTML(val)}" style="padding:6px 8px;font-size:13px">
+        </div>
+      `;
+    }).join('');
+  } else if (typeof def === 'object' && def !== null) {
+    // Grouped layout for CHURIDAR / BLOUSE & PANT
+    container.style.display = 'block';
+    container.innerHTML = Object.entries(def).map(([grpName, grpKeys]) => `
+      <div class="measurement-group-card" style="background:#fdf7fc;border:1.5px solid #ebd3e8;border-radius:10px;padding:14px;margin-bottom:12px">
+        <h4 style="margin:0 0 10px 0;color:var(--violet);font-size:15px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #ebd3e8;padding-bottom:6px">
+          <span>${grpName.includes('PANT') ? '👖' : '📐'}</span> ${escapeHTML(grpName)} Dimensions (Slip)
+        </h4>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));gap:10px">
+          ${grpKeys.map(k => {
+            const compoundKey = grpName.includes('PANT') ? 'pant_' + k : k;
+            const val = existingValues[compoundKey] != null ? existingValues[compoundKey]
+                      : (existingValues[k] != null ? existingValues[k]
+                      : (existingValues[grpName] && existingValues[grpName][k] != null ? existingValues[grpName][k] : ''));
+            return `
+              <div class="field" style="margin:0">
+                <label for="dim_${compoundKey}" style="font-size:12px;font-weight:600">${escapeHTML(labels[k] || k)}</label>
+                <input id="dim_${compoundKey}" data-measure-key="${compoundKey}" type="text" inputmode="decimal"
+                       placeholder="${unit}" value="${escapeHTML(val)}" style="padding:6px 8px;font-size:13px">
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
 }
 
 async function handleSaveMeasurement(e) {
@@ -713,23 +870,34 @@ async function handleSaveMeasurement(e) {
   }
 
   try {
-    await API.post(`/api/tailor/customers/${currentCustomer.id}/measurements`, {
-      garmentType: garment,
-      unit,
-      dimensions,
-      fitPreference,
-      notes
-    });
+    if (editingMeasurementId) {
+      await API.put(`/api/tailor/customers/${currentCustomer.id}/measurements/${editingMeasurementId}`, {
+        garmentType: garment,
+        unit,
+        dimensions,
+        fitPreference,
+        notes
+      });
+      setNotice('#workspaceNotice', `Measurement profile for ${garment} updated successfully.`, true);
+    } else {
+      await API.post(`/api/tailor/customers/${currentCustomer.id}/measurements`, {
+        garmentType: garment,
+        unit,
+        dimensions,
+        fitPreference,
+        notes
+      });
+      setNotice('#workspaceNotice', `Measurement snapshot for ${garment} saved successfully.`, true);
+    }
     closeMeasurementForm();
     await loadCustomerMeasurements(currentCustomer.id);
     selectGarmentTab(garment);
-    setNotice('#workspaceNotice', `Measurement snapshot for ${garment} saved successfully.`, true);
   } catch (err) {
     setNotice('#measureNotice', err.message);
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.textContent = '💾 Save Measurement Snapshot';
+      saveBtn.textContent = editingMeasurementId ? '💾 Update Measurement Profile' : '💾 Save Measurement Snapshot';
     }
   }
 }
@@ -792,25 +960,60 @@ function renderExistingOpenOrdersList() {
   }
 
   card.classList.remove('hidden');
-  container.innerHTML = openOrders.map(o => `
-    <div style="background:#fff;border:1px solid #ebd3e8;border-radius:10px;padding:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <strong>${escapeHTML(o.order_number)}</strong>
-          <span class="status-badge status-${o.status}">${ORDER_STATUS_LABELS[o.status] || o.status}</span>
-          <span class="status-badge pay-${o.payment_status}">${formatPayBadge(o.payment_status)}</span>
+  container.className = 'open-orders-wrapper';
+  container.innerHTML = openOrders.map(o => {
+    const isDue = Number(o.due || 0) > 0;
+    const hasPaid = Number(o.amount_paid || 0) > 0;
+    const createdStr = o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    const dueStr = o.due_date ? new Date(o.due_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'As agreed';
+
+    return `
+      <div class="open-order-card">
+        <div class="open-order-header">
+          <div class="open-order-identity">
+            <span class="open-order-num">${escapeHTML(o.order_number)}</span>
+            <span class="status-badge status-${o.status}">${ORDER_STATUS_LABELS[o.status] || o.status}</span>
+            <span class="status-badge pay-${o.payment_status}">${formatPayBadge(o.payment_status)}</span>
+            ${createdStr ? `<span class="open-order-date">· Created ${createdStr}</span>` : ''}
+          </div>
+          <div class="open-order-date">
+            <span>📅 Delivery: <strong>${escapeHTML(dueStr)}</strong></span>
+          </div>
         </div>
-        <div class="muted" style="font-size:12px;margin-top:3px">
-          Total: <strong>${money(o.total)}</strong> · Paid: <strong>${money(o.amount_paid)}</strong> · Due: <strong style="color:#b30000">${money(o.due)}</strong>
-          ${o.due_date ? `· Promised Delivery: ${escapeHTML(o.due_date)}` : ''}
+
+        <div class="open-order-metrics-strip">
+          <div class="open-order-metric">
+            <span class="label">Total Amount</span>
+            <span class="value">${money(o.total)}</span>
+          </div>
+          <div class="open-order-metric">
+            <span class="label">Amount Paid</span>
+            <span class="value" style="color:#18643d">${money(o.amount_paid)}</span>
+          </div>
+          <div class="open-order-metric">
+            <span class="label">Remaining Due</span>
+            <span class="value ${isDue ? 'due-positive' : 'due-zero'}">${money(o.due)}</span>
+          </div>
+          <div class="open-order-metric">
+            <span class="label">Payment Status</span>
+            <span class="value" style="font-size:13px;padding-top:2px">${formatPayBadge(o.payment_status)}</span>
+          </div>
+        </div>
+
+        <div class="open-order-actions-bar">
+          <button class="btn ${isDue ? 'orange' : 'light'} btn-sm" type="button" onclick="openOrderPaymentModal('${o.id}')">
+            💳 ${isDue ? `Record Payment (${money(o.due)})` : 'Payment History'}
+          </button>
+          <button class="btn light btn-sm" type="button" onclick="openEditOrder('${o.id}')">✏️ Resume / Edit Order</button>
+          <button class="btn ghost btn-sm" type="button" onclick="viewOrderAuthoritativeBill('${o.id}')">📄 Review Bill</button>
+          <button class="btn ghost btn-sm" type="button" onclick="quickShareWhatsApp('${o.id}')" title="Share bill details on WhatsApp">💬 WhatsApp</button>
+          <button class="btn ghost btn-sm" style="color:#b30000;border-color:#f8caca" type="button" onclick="promptDeleteOrder('${o.id}')" title="Delete or cancel this order">
+            🗑️ ${hasPaid ? 'Cancel' : 'Delete'}
+          </button>
         </div>
       </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn light btn-sm" type="button" onclick="openEditOrder('${o.id}')">✏️ Resume / Edit Order</button>
-        <button class="btn ghost btn-sm" type="button" onclick="viewOrderAuthoritativeBill('${o.id}')">Review Bill</button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function renderCustomerOrdersTable() {
@@ -821,31 +1024,303 @@ function renderCustomerOrdersTable() {
     return;
   }
 
-  tbody.innerHTML = customerOrders.map(o => `
-    <tr>
-      <td><strong>${escapeHTML(o.order_number)}</strong></td>
-      <td>${new Date(o.created_at).toLocaleDateString('en-IN', {month:'short', day:'numeric'})}</td>
-      <td>
-        <select onchange="updateOrderStatus('${o.id}', this.value)" style="padding:4px 8px;font-size:12px;border-radius:6px">
-          ${Object.entries(ORDER_STATUS_LABELS).map(([k, label]) => `
-            <option value="${k}" ${k === o.status ? 'selected' : ''}>${label}</option>
-          `).join('')}
-        </select>
-      </td>
-      <td><span class="status-badge pay-${o.payment_status}">${formatPayBadge(o.payment_status)}</span></td>
-      <td>${money(o.total)}</td>
-      <td>${money(o.amount_paid)}</td>
-      <td><strong>${money(o.due)}</strong></td>
-      <td>${o.due_date ? escapeHTML(o.due_date) : '—'}</td>
-      <td>
-        <div style="display:flex;gap:4px">
-          <button class="btn light btn-sm" type="button" onclick="openEditOrder('${o.id}')">Edit</button>
-          <button class="btn ghost btn-sm" type="button" onclick="viewOrderAuthoritativeBill('${o.id}')">Bill</button>
-          <button class="btn ghost btn-sm" type="button" onclick="quickShareWhatsApp('${o.id}')">WA</button>
+  tbody.innerHTML = customerOrders.map(o => {
+    const isDue = Number(o.due || 0) > 0;
+    const hasPaid = Number(o.amount_paid || 0) > 0;
+    return `
+      <tr>
+        <td><strong>${escapeHTML(o.order_number)}</strong></td>
+        <td>${new Date(o.created_at).toLocaleDateString('en-IN', {month:'short', day:'numeric'})}</td>
+        <td>
+          <select onchange="updateOrderStatus('${o.id}', this.value)" style="padding:4px 8px;font-size:12px;border-radius:6px">
+            ${Object.entries(ORDER_STATUS_LABELS).map(([k, label]) => `
+              <option value="${k}" ${k === o.status ? 'selected' : ''}>${label}</option>
+            `).join('')}
+          </select>
+        </td>
+        <td><span class="status-badge pay-${o.payment_status}">${formatPayBadge(o.payment_status)}</span></td>
+        <td>${money(o.total)}</td>
+        <td>${money(o.amount_paid)}</td>
+        <td><strong style="color:${isDue ? '#b30000' : '#18643d'}">${money(o.due)}</strong></td>
+        <td>${o.due_date ? escapeHTML(o.due_date) : '—'}</td>
+        <td>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="btn ${isDue ? 'orange' : 'light'} btn-sm" type="button" onclick="openOrderPaymentModal('${o.id}')">💳 Pay</button>
+            <button class="btn light btn-sm" type="button" onclick="openEditOrder('${o.id}')">Edit</button>
+            <button class="btn ghost btn-sm" type="button" onclick="viewOrderAuthoritativeBill('${o.id}')">Bill</button>
+            <button class="btn ghost btn-sm" type="button" onclick="quickShareWhatsApp('${o.id}')">WA</button>
+            <button class="btn ghost btn-sm" style="color:#b30000;border-color:#f8caca" type="button" onclick="promptDeleteOrder('${o.id}')" title="Delete or cancel order">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ============================================================================
+// ORDER PAYMENT MODAL WORKFLOW
+// ============================================================================
+let activeModalOrder = null;
+
+async function openOrderPaymentModal(orderId) {
+  try {
+    const o = await API.get('/api/tailor/orders/' + orderId);
+    activeModalOrder = o;
+
+    document.getElementById('opmOrderId').value = o.id;
+    document.getElementById('opmSubtitle').textContent = `Order: ${o.order_number} · Customer: ${o.customer || currentCustomer?.name || 'Customer'}`;
+    document.getElementById('opmTotal').textContent = money(o.total);
+    document.getElementById('opmPaid').textContent = money(o.amount_paid);
+    document.getElementById('opmDue').textContent = money(o.due);
+
+    const dueNum = Number(o.due || 0);
+    const amtInput = document.getElementById('opmAmount');
+    amtInput.value = dueNum > 0 ? dueNum.toFixed(2) : '0.00';
+    amtInput.max = dueNum > 0 ? dueNum.toFixed(2) : '0.00';
+
+    document.getElementById('opmMethod').value = 'CASH';
+    document.getElementById('opmReference').value = '';
+    document.getElementById('opmNote').value = '';
+    document.getElementById('opmNotice').hidden = true;
+
+    // Render payment history
+    const tbody = document.getElementById('opmPaymentHistoryRows');
+    const payments = o.payments || [];
+    if (!payments.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:10px">No payments recorded yet.</td></tr>';
+    } else {
+      tbody.innerHTML = payments.map(p => {
+        const d = p.received_at ? new Date(p.received_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short' }) : '—';
+        const refNote = [p.reference, p.note].filter(Boolean).join(' · ') || '—';
+        return `
+          <tr>
+            <td>${d}</td>
+            <td><strong style="color:${p.payment_type === 'REFUND' ? '#b30000' : '#18643d'}">${money(p.amount)}</strong></td>
+            <td><span class="pill" style="font-size:11px">${escapeHTML(p.method)}</span></td>
+            <td>${escapeHTML(refNote)}</td>
+            <td><small class="muted">${escapeHTML(p.received_by_name || 'Staff')}</small></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('orderPaymentModal').classList.remove('hidden');
+    amtInput.focus();
+  } catch (err) {
+    alert('Failed to load order payment details: ' + err.message);
+  }
+}
+
+function closeOrderPaymentModal() {
+  document.getElementById('orderPaymentModal').classList.add('hidden');
+  activeModalOrder = null;
+}
+
+async function handleSaveOrderPayment(e) {
+  e.preventDefault();
+  const submitBtn = document.getElementById('opmSubmitBtn');
+  const noticeEl = document.getElementById('opmNotice');
+
+  const orderId = document.getElementById('opmOrderId').value;
+  const amount = Number(document.getElementById('opmAmount').value);
+  const method = document.getElementById('opmMethod').value;
+  const reference = document.getElementById('opmReference').value.trim();
+  const note = document.getElementById('opmNote').value.trim();
+
+  if (!orderId || isNaN(amount) || amount <= 0) {
+    noticeEl.textContent = 'Please enter a valid payment amount greater than zero.';
+    noticeEl.hidden = false;
+    noticeEl.className = 'notice error';
+    return;
+  }
+
+  // Idempotency token to prevent double submissions
+  const idempotencyKey = orderId + '-' + Date.now();
+
+  try {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving Payment...';
+
+    const res = await API.post('/api/tailor/orders/' + orderId + '/payments', {
+      amount,
+      method,
+      reference,
+      note,
+      idempotencyKey
+    });
+
+    const updatedOrder = res.order || (await API.get('/api/tailor/orders/' + orderId));
+
+    // Update in-memory lists immediately
+    if (activeOrder && activeOrder.id === orderId) {
+      activeOrder.amount_paid = updatedOrder.amount_paid;
+      activeOrder.due = updatedOrder.due;
+      activeOrder.payment_status = updatedOrder.payment_status;
+    }
+
+    const idx = customerOrders.findIndex(x => x.id === orderId);
+    if (idx >= 0) {
+      customerOrders[idx].amount_paid = updatedOrder.amount_paid;
+      customerOrders[idx].due = updatedOrder.due;
+      customerOrders[idx].payment_status = updatedOrder.payment_status;
+    }
+
+    const sIdx = shopOrders.findIndex(x => x.id === orderId);
+    if (sIdx >= 0) {
+      shopOrders[sIdx].amount_paid = updatedOrder.amount_paid;
+      shopOrders[sIdx].due = updatedOrder.due;
+      shopOrders[sIdx].payment_status = updatedOrder.payment_status;
+    }
+
+    renderExistingOpenOrdersList();
+    renderCustomerOrdersTable();
+    loadRecentShopOrders();
+
+    closeOrderPaymentModal();
+    setNotice('#workspaceNotice', `✓ Payment of ${money(amount)} recorded for ${updatedOrder.order_number}. Remaining due: ${money(updatedOrder.due)}.`, true);
+  } catch (err) {
+    noticeEl.textContent = err.message || 'Failed to record payment.';
+    noticeEl.hidden = false;
+    noticeEl.className = 'notice error';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = '✓ Save Payment Receipt';
+  }
+}
+
+// ============================================================================
+// ORDER DELETION & SAFE CANCELLATION WORKFLOW
+// ============================================================================
+let pendingDeleteOrder = null;
+
+async function promptDeleteOrder(orderId) {
+  try {
+    let o = customerOrders.find(x => x.id === orderId) || shopOrders.find(x => x.id === orderId);
+    if (!o || !o.order_number) {
+      o = await API.get('/api/tailor/orders/' + orderId);
+    }
+    pendingDeleteOrder = o;
+
+    const titleEl = document.getElementById('domTitle');
+    const subtitleEl = document.getElementById('domSubtitle');
+    const bodyEl = document.getElementById('domBody');
+    const actionBtn = document.getElementById('domActionBtn');
+    document.getElementById('domNotice').hidden = true;
+
+    subtitleEl.textContent = `Order: ${o.order_number} · Customer: ${o.customer || currentCustomer?.name || 'Customer'}`;
+
+    const paidNum = Number(o.amount_paid || 0);
+
+    if (paidNum > 0) {
+      // Order has payments: Protect financial history, offer cancellation/voiding
+      titleEl.textContent = '🛡️ Financial Protection: Order Has Payments';
+      bodyEl.innerHTML = `
+        <div style="background:#fff8ee;border:1.5px solid #fed2a4;border-radius:10px;padding:14px;margin-bottom:12px">
+          <strong style="color:#a85a00">⚠️ Existing Payment Records Detected: ${money(paidNum)}</strong>
+          <p style="margin:6px 0 0;font-size:13px;color:#663c00">
+            Order <strong>${escapeHTML(o.order_number)}</strong> has recorded payments in the accounting ledger.
+            To maintain tax compliance, cash reconciliation, and historical audit trails, orders with payments cannot be hard-deleted from the database.
+          </p>
         </div>
-      </td>
-    </tr>
-  `).join('');
+        <p style="margin:0 0 8px;font-size:13px;color:#444">
+          <strong>Safe Recommended Action:</strong> You can mark this order as <strong>CANCELLED</strong>.
+          This will void the order, restore any inventory, and preserve the complete transaction history for accounting.
+        </p>
+      `;
+      actionBtn.className = 'btn orange';
+      actionBtn.style.background = '#FF5A0A';
+      actionBtn.style.borderColor = '#FF5A0A';
+      actionBtn.textContent = `🚫 Cancel Order ${o.order_number}`;
+      actionBtn.onclick = () => executeCancelOrder(o.id, o.order_number);
+    } else {
+      // Order has NO payments: Safe draft deletion with explicit confirmation
+      titleEl.textContent = `🗑️ Delete Draft Order ${o.order_number}?`;
+      bodyEl.innerHTML = `
+        <div style="background:#fdeeee;border:1.5px solid #f8caca;border-radius:10px;padding:14px;margin-bottom:12px">
+          <strong style="color:#b30000">Permanent Deletion Confirmation</strong>
+          <p style="margin:6px 0 0;font-size:13px;color:#6b0000">
+            Are you sure you want to delete order <strong>${escapeHTML(o.order_number)}</strong>?
+            This order has no recorded payments and will be completely removed from the database.
+          </p>
+        </div>
+        <p class="muted" style="margin:0;font-size:13px">This action cannot be undone.</p>
+      `;
+      actionBtn.className = 'btn orange';
+      actionBtn.style.background = '#b30000';
+      actionBtn.style.borderColor = '#b30000';
+      actionBtn.textContent = `🗑️ Yes, Delete Order ${o.order_number}`;
+      actionBtn.onclick = () => executeDeleteOrder(o.id, o.order_number);
+    }
+
+    document.getElementById('deleteOrderModal').classList.remove('hidden');
+  } catch (err) {
+    alert('Error inspecting order for deletion: ' + err.message);
+  }
+}
+
+function closeDeleteOrderModal() {
+  document.getElementById('deleteOrderModal').classList.add('hidden');
+  pendingDeleteOrder = null;
+}
+
+async function executeDeleteOrder(orderId, orderNum) {
+  const noticeEl = document.getElementById('domNotice');
+  const actionBtn = document.getElementById('domActionBtn');
+  try {
+    actionBtn.disabled = true;
+    actionBtn.textContent = 'Deleting...';
+
+    await API.delete('/api/tailor/orders/' + orderId);
+
+    // Remove from in-memory arrays
+    customerOrders = customerOrders.filter(x => x.id !== orderId);
+    shopOrders = shopOrders.filter(x => x.id !== orderId);
+    if (activeOrder && activeOrder.id === orderId) activeOrder = null;
+
+    renderExistingOpenOrdersList();
+    renderCustomerOrdersTable();
+    loadRecentShopOrders();
+
+    closeDeleteOrderModal();
+    setNotice('#workspaceNotice', `✓ Draft order ${orderNum} was permanently deleted.`, true);
+  } catch (err) {
+    noticeEl.textContent = err.message || 'Failed to delete order.';
+    noticeEl.hidden = false;
+    noticeEl.className = 'notice error';
+  } finally {
+    actionBtn.disabled = false;
+  }
+}
+
+async function executeCancelOrder(orderId, orderNum) {
+  const noticeEl = document.getElementById('domNotice');
+  const actionBtn = document.getElementById('domActionBtn');
+  try {
+    actionBtn.disabled = true;
+    actionBtn.textContent = 'Cancelling...';
+
+    await API.patch('/api/tailor/orders/' + orderId + '/status', { status: 'CANCELLED' });
+
+    // Update in-memory status
+    const o = customerOrders.find(x => x.id === orderId);
+    if (o) o.status = 'CANCELLED';
+    const so = shopOrders.find(x => x.id === orderId);
+    if (so) so.status = 'CANCELLED';
+    if (activeOrder && activeOrder.id === orderId) activeOrder.status = 'CANCELLED';
+
+    renderExistingOpenOrdersList();
+    renderCustomerOrdersTable();
+    loadRecentShopOrders();
+
+    closeDeleteOrderModal();
+    setNotice('#workspaceNotice', `✓ Order ${orderNum} has been safely marked as CANCELLED. All payment records were preserved.`, true);
+  } catch (err) {
+    noticeEl.textContent = err.message || 'Failed to cancel order.';
+    noticeEl.hidden = false;
+    noticeEl.className = 'notice error';
+  } finally {
+    actionBtn.disabled = false;
+  }
 }
 
 // ============================================================================
@@ -971,15 +1446,80 @@ async function openEditOrder(orderId) {
   }
 }
 
-function populateOrderMeasurementDropdown(selectedId = null) {
+function populateOrderMeasurementDropdown(selectedIds = null) {
+  const container = document.getElementById('orderMeasurementCheckboxes');
   const sel = document.getElementById('orderMeasurementSelect');
-  if (!sel) return;
 
-  sel.innerHTML = '<option value="">No measurement snapshot attached (Alteration / Ready-made)</option>' +
-    customerMeasurements.map(m => {
-      const d = new Date(m.created_at).toLocaleDateString('en-IN', {month:'short', day:'numeric'});
-      return `<option value="${m.id}" ${m.id === selectedId ? 'selected' : ''}>${escapeHTML(m.garment_type)} — Snapshot (${d}) [${escapeHTML(m.fit_preference||'Regular')}]</option>`;
-    }).join('');
+  let activeIds = [];
+  if (Array.isArray(selectedIds)) {
+    activeIds = selectedIds.map(String);
+  } else if (typeof selectedIds === 'string' && selectedIds) {
+    activeIds = selectedIds.split(',').map(s => s.trim());
+  } else if (activeOrder) {
+    if (activeOrder.measurements && activeOrder.measurements.length) {
+      activeIds = activeOrder.measurements.map(m => String(m.id));
+    } else if (activeOrder.measurement_id) {
+      activeIds = [String(activeOrder.measurement_id)];
+    }
+  }
+
+  if (sel) {
+    sel.innerHTML = '<option value="">No measurement snapshot attached (Alteration / Ready-made)</option>' +
+      customerMeasurements.map(m => {
+        const d = new Date(m.created_at).toLocaleDateString('en-IN', {month:'short', day:'numeric'});
+        return `<option value="${m.id}" ${activeIds.includes(String(m.id)) ? 'selected' : ''}>${escapeHTML(m.garment_type)} — Snapshot (${d}) [${escapeHTML(m.fit_preference||'Regular')}]</option>`;
+      }).join('');
+  }
+
+  if (!container) return;
+
+  if (!customerMeasurements.length) {
+    container.innerHTML = `
+      <div class="muted" style="grid-column:1/-1;text-align:center;padding:12px;background:#fff;border-radius:8px">
+        No measurement snapshots saved yet for this customer.
+        <div style="margin-top:6px">
+          <button class="btn light btn-sm" type="button" onclick="openMeasurementForm('CHURIDAR / BLOUSE')">＋ Take Slip Measurements</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = customerMeasurements.map(m => {
+    const d = new Date(m.created_at).toLocaleDateString('en-IN', {month:'short', day:'numeric', year:'numeric'});
+    let dims = {};
+    try { dims = typeof m.dimensions === 'string' ? JSON.parse(m.dimensions) : (m.dimensions || {}); } catch (_) {}
+    const isChecked = activeIds.includes(String(m.id));
+    const previewList = Object.entries(dims).slice(0, 5).map(([k, v]) => `${labels[k] || k}: ${v}`).join(' · ');
+
+    return `
+      <label class="order-measure-tile ${isChecked ? 'selected' : ''}">
+        <input type="checkbox" data-order-measure-id="${m.id}" ${isChecked ? 'checked' : ''} style="margin-top:3px;accent-color:var(--violet)" onchange="toggleOrderMeasureTile(this)">
+        <div class="order-measure-tile-content">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
+            <strong style="color:var(--violet);font-size:13px;word-break:break-word">${escapeHTML(m.garment_type)}</strong>
+            <span class="muted" style="font-size:11px;white-space:nowrap">${d}</span>
+          </div>
+          <div style="font-size:11px;color:#666;margin-top:2px;word-break:break-word">
+            Unit: <strong>${escapeHTML(m.unit || 'in')}</strong> · Fit: <strong>${escapeHTML(m.fit_preference || 'Regular')}</strong>
+          </div>
+          ${previewList ? `<div class="order-measure-summary" title="${escapeHTML(previewList)}">${escapeHTML(previewList)}</div>` : ''}
+        </div>
+      </label>
+    `;
+  }).join('');
+}
+
+function toggleOrderMeasureTile(checkbox) {
+  const tile = checkbox.closest('.order-measure-tile');
+  if (tile) {
+    tile.classList.toggle('selected', checkbox.checked);
+  }
+  const checked = document.querySelectorAll('[data-order-measure-id]:checked');
+  const sel = document.getElementById('orderMeasurementSelect');
+  if (sel) {
+    sel.value = checked.length ? checked[0].dataset.orderMeasureId : '';
+  }
 }
 
 async function loadProducts() {
@@ -1084,8 +1624,12 @@ async function handleGenerateBill() {
 
   const dueDate = val('orderDueDate') || null;
   const notes = val('orderNotes') || null;
-  const measurementId = val('orderMeasurementSelect') || null;
   const discount = Number(val('orderDiscount') || 0);
+
+  const selectedCbs = Array.from(document.querySelectorAll('[data-order-measure-id]:checked'));
+  const measurementIds = selectedCbs.map(cb => cb.dataset.orderMeasureId);
+  const measurementId = measurementIds.length ? measurementIds[0] : (val('orderMeasurementSelect') || null);
+
   const genBtn = document.getElementById('generateBillBtn');
 
   if (genBtn) {
@@ -1103,6 +1647,7 @@ async function handleGenerateBill() {
         dueDate,
         notes,
         measurementId,
+        measurementIds,
         status
       });
       activeOrder = updated;
@@ -1128,12 +1673,14 @@ async function handleGenerateBill() {
     const created = await API.post('/api/tailor/orders', {
       customerId: currentCustomer.id,
       measurementId,
+      measurementIds,
       dueDate,
       notes,
       discount,
       items: cart
     });
     activeOrder = created;
+    window.activeOrder = created;
     editingOrderId = created.id;
     await Promise.all([
       loadCustomerOrders(currentCustomer.id),
@@ -1201,6 +1748,43 @@ function renderAuthoritativeBill() {
       <td><strong>${money(it.amount)}</strong></td>
     </tr>
   `).join('');
+
+  // Attached measurements
+  const measSection = document.getElementById('billMeasurementsSection');
+  const measContent = document.getElementById('billMeasurementsContent');
+  const mList = o.measurements && o.measurements.length ? o.measurements : (o.measurement ? [o.measurement] : []);
+
+  if (measSection && measContent) {
+    if (mList.length > 0) {
+      measSection.classList.remove('hidden');
+      measContent.innerHTML = mList.map(m => {
+        let dims = {};
+        try {
+          dims = typeof m.dimensions === 'string' ? JSON.parse(m.dimensions) : (m.dimensions || {});
+        } catch (_) {}
+        const d = m.created_at ? new Date(m.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+        return `
+          <div style="margin-bottom:10px;padding:12px;background:#fff;border:1px solid #ebd3e8;border-radius:8px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:4px">
+              <strong style="color:var(--violet);font-size:14px">📐 ${escapeHTML(m.garment_type)}</strong>
+              <span class="muted" style="font-size:12px">Unit: <strong>${escapeHTML(m.unit || 'in')}</strong> · Fit: <strong>${escapeHTML(m.fit_preference || 'Regular')}</strong> ${d ? `· (${d})` : ''}</span>
+            </div>
+            <div class="dimension-chips" style="display:flex;flex-wrap:wrap;gap:6px">
+              ${Object.entries(dims).map(([k, v]) => `
+                <div class="dim-chip" style="background:#fcf5fb;border:1px solid #ebd3e8;padding:4px 8px;border-radius:6px;font-size:12px">
+                  <span class="muted">${escapeHTML(labels[k] || k)}:</span>
+                  <strong style="color:var(--violet)">${escapeHTML(String(v))} ${escapeHTML(m.unit || 'in')}</strong>
+                </div>
+              `).join('')}
+            </div>
+            ${m.notes ? `<div class="muted" style="font-size:12px;margin-top:8px;font-style:italic">Notes: ${escapeHTML(m.notes)}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    } else {
+      measSection.classList.add('hidden');
+    }
+  }
 
   // Financials
   document.getElementById('billSubtotal').textContent = money(o.subtotal);
@@ -1445,8 +2029,19 @@ function setupFinalizeStage() {
   document.getElementById('whatsappPreviewBubble').textContent = waMsg;
 }
 
+function resolveBillPublicUrl(orderId) {
+  const configuredBase = (window.paymentQrData && window.paymentQrData.publicBaseUrl) ? String(window.paymentQrData.publicBaseUrl).trim() : '';
+  if (configuredBase && !configuredBase.includes('localhost') && !configuredBase.includes('127.0.0.1')) {
+    return `${configuredBase.replace(/\/+$/, '')}/bill.html?id=${encodeURIComponent(orderId)}`;
+  }
+  if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    return `${location.origin}/bill.html?id=${encodeURIComponent(orderId)}`;
+  }
+  return null;
+}
+
 function buildWhatsAppMessage(o) {
-  const billUrl = `${location.origin}/bill.html?id=${o.id}`;
+  const billUrl = resolveBillPublicUrl(o.id);
   const dueD = o.due_date ? new Date(o.due_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'As agreed';
 
   const itemsList = (o.items || []).map(it => `• ${it.item_name} (Qty: ${it.quantity}) - ${money(it.amount)}`).join('\n');
@@ -1458,7 +2053,14 @@ function buildWhatsAppMessage(o) {
     balanceText += `\nPrevious Outstanding Balance: ${money(prevDue)}\nTotal Outstanding Customer Balance: ${money(overallDue)}`;
   }
 
-  return `Namaste ${o.customer}! 🙏\nYour stitching bill ${o.order_number} from Jolly Ladies Tailor has been generated.\n\nGarments & Services:\n${itemsList}\n\nTotal for this Bill: ${money(o.total)}\nAmount Paid: ${money(o.amount_paid)}\n${balanceText}\nPromised Delivery: ${dueD}\n\nView and download your digital e-bill & official PDF:\n${billUrl}\n\nThank you for choosing Jolly Ladies Tailor!\nSouthern Avenue, Kolkata · Phone: 9748546778`;
+  let linkText = '';
+  if (billUrl) {
+    linkText = `\n\nView and download your digital e-bill online:\n${billUrl}`;
+  } else {
+    linkText = `\n\n(Please find your official bill summary above. Kindly refer to the attached PDF invoice for your complete itemized receipt)`;
+  }
+
+  return `Namaste ${o.customer}! 🙏\nYour stitching bill ${o.order_number} from Jolly Ladies Tailor has been generated.\n\nGarments & Services:\n${itemsList}\n\nTotal for this Bill: ${money(o.total)}\nAmount Paid: ${money(o.amount_paid)}\n${balanceText}\nPromised Delivery: ${dueD}${linkText}\n\nThank you for choosing Jolly Ladies Tailor!\nSouthern Avenue, Kolkata · Phone: 9748546778`;
 }
 
 function executeWhatsAppShare() {
@@ -1468,10 +2070,44 @@ function executeWhatsAppShare() {
     alert('A valid 10-digit customer mobile number is required to send WhatsApp bill.');
     return;
   }
+
+  const billUrl = resolveBillPublicUrl(activeOrder.id);
+  // If only running locally with no public URL, automatically trigger the PDF invoice download
+  if (!billUrl) {
+    const pdfBtn = document.getElementById('downloadFinalPdfBtn');
+    if (pdfBtn && pdfBtn.href) {
+      const dl = document.createElement('a');
+      dl.href = pdfBtn.href;
+      dl.download = pdfBtn.getAttribute('download') || `invoice-${activeOrder.order_number}.pdf`;
+      document.body.appendChild(dl);
+      dl.click();
+      document.body.removeChild(dl);
+    }
+  }
+
   const msg = buildWhatsAppMessage(activeOrder);
   const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   window.open(waUrl, '_blank', 'noopener,noreferrer');
-  setNotice('#workspaceNotice', `WhatsApp opened for ${escapeHTML(activeOrder.customer)}. Download the PDF invoice if you wish to attach it.`, true);
+
+  // Reveal WhatsApp Handoff Confirmation Box — do not mark bill sent until tailor confirms
+  const handoffCard = document.getElementById('tailorWaHandoffCard');
+  if (handoffCard) handoffCard.classList.remove('hidden');
+  const confirmedNotice = document.getElementById('tailorWaConfirmedNotice');
+  if (confirmedNotice) confirmedNotice.classList.add('hidden');
+
+  setNotice('#workspaceNotice', `WhatsApp opened for ${escapeHTML(activeOrder.customer)}. Please attach the downloaded PDF invoice in WhatsApp and confirm below when sent.`, true);
+}
+
+function confirmTailorWhatsAppHandoff() {
+  const handoffCard = document.getElementById('tailorWaHandoffCard');
+  if (handoffCard) handoffCard.classList.add('hidden');
+  const confirmedNotice = document.getElementById('tailorWaConfirmedNotice');
+  if (confirmedNotice) {
+    const timeStr = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    confirmedNotice.textContent = `✓ Tailor confirmed: Bill handoff sent via WhatsApp at ${timeStr}.`;
+    confirmedNotice.classList.remove('hidden');
+  }
+  setNotice('#workspaceNotice', `Bill WhatsApp handoff confirmed for ${escapeHTML(activeOrder ? activeOrder.customer : 'customer')}.`, true);
 }
 
 function copyWhatsAppMessage() {
@@ -1595,9 +2231,11 @@ async function loadRecentShopOrders() {
         <td><strong>${money(o.due)}</strong></td>
         <td>${o.due_date ? escapeHTML(o.due_date) : '—'}</td>
         <td>
-          <div style="display:flex;gap:4px">
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
             <button class="btn light btn-sm" type="button" onclick="selectCustomer('${o.customer_id}')">Open Hub</button>
+            <button class="btn ${Number(o.due||0) > 0 ? 'orange' : 'light'} btn-sm" type="button" onclick="openOrderPaymentModal('${o.id}')">💳 Pay</button>
             <button class="btn ghost btn-sm" type="button" onclick="viewOrderAuthoritativeBill('${o.id}')">Invoice</button>
+            <button class="btn ghost btn-sm" style="color:#b30000;border-color:#f8caca" type="button" onclick="promptDeleteOrder('${o.id}')" title="Delete or cancel order">🗑️</button>
           </div>
         </td>
       </tr>
@@ -1671,6 +2309,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginForm = document.getElementById('loginForm');
   if (loginForm) loginForm.addEventListener('submit', doLogin);
 
+  // Local automated test helper
+  const urlParams = new URLSearchParams(window.location.search);
+  if ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (urlParams.get('autologin') === 'tailor1' || urlParams.get('autologin') === 'tailor')) {
+    const u = document.getElementById('username');
+    const p = document.getElementById('password');
+    if (u && p) {
+      u.value = 'tailor1';
+      p.value = 'TailorPassword123!';
+      doLogin(new Event('submit'));
+    }
+  }
+
   const logoutBtn = document.getElementById('logout');
   if (logoutBtn) logoutBtn.addEventListener('click', logout);
 
@@ -1721,6 +2371,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('workspace').classList.remove('hidden');
         document.getElementById('logout').classList.remove('hidden');
         await loadInitialWorkspace();
+        const urlParams = new URLSearchParams(window.location.search);
+        const selCust = urlParams.get('selectCustomer');
+        if (selCust) {
+          await selectCustomer(selCust);
+          goToStage(2);
+        }
       }
     } catch (_) {
       /* Anonymous visitor */

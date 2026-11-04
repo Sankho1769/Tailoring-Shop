@@ -70,7 +70,7 @@ public class SecurityConfig {
             .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
             .exceptionHandling(e -> e.authenticationEntryPoint(new org.springframework.security.web.authentication.HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/", "/index.html", "/tailor.html", "/admin.html", "/bill.html", "/404.html", "/robots.txt", "/sitemap.xml", "/css/**", "/js/**", "/images/**", "/favicon.ico", "/error", "/error/**", "/api/auth/csrf", "/api/auth/login", "/api/public/**").permitAll()
+                .requestMatchers("/", "/index.html", "/tailor.html", "/admin.html", "/bill.html", "/404.html", "/robots.txt", "/sitemap.xml", "/css/**", "/js/**", "/images/**", "/icons/**", "/branding/**", "/brand/**", "/favicon.ico", "/error", "/error/**", "/api/auth/csrf", "/api/auth/login", "/api/public/**").permitAll()
                 .requestMatchers("/api/admin/**", "/api/media/**").hasRole("ADMIN")
                 .requestMatchers("/api/tailor/**").hasAnyRole("ADMIN", "TAILOR")
                 .anyRequest().authenticated())

@@ -522,4 +522,176 @@ class OrderAndBillingIntegrationTest {
                 .andExpect(jsonPath("$.order.due", is(0.0)))
                 .andExpect(jsonPath("$.order.payment_status", is("PAID")));
     }
+
+    @Test
+    @DisplayName("Open Order Payment Updates: Partial payments, multiple payments, payment history, and overpayment prevention")
+    @WithMockUser(username = "testtailor", roles = {"TAILOR"})
+    void testOpenOrderPaymentWorkflow() throws Exception {
+        // 1. Create a customer
+        String custJson = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Rekha Mukherjee", "phone", "9832299881"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(custJson, Map.class).get("id");
+
+        // 2. Create an order with ₹1000 total and zero advance (due = ₹1000)
+        String ordJson = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", customerId,
+                                "items", List.of(Map.of("name", "Designer Blouse", "quantity", 1, "rate", 1000.00)),
+                                "advanceAmount", 0.00
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.total", is(1000.0)))
+                .andExpect(jsonPath("$.amount_paid", is(0.0)))
+                .andExpect(jsonPath("$.due", is(1000.0)))
+                .andExpect(jsonPath("$.payment_status", is("PAYMENT_DUE")))
+                .andReturn().getResponse().getContentAsString();
+        String orderId = (String) mapper.readValue(ordJson, Map.class).get("id");
+
+        // 3. First partial payment: ₹350 via CASH
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 350.00,
+                                "method", "CASH",
+                                "note", "First advance payment"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(350.0)))
+                .andExpect(jsonPath("$.order.due", is(650.0)))
+                .andExpect(jsonPath("$.order.payment_status", is("PARTIALLY_PAID")));
+
+        // 4. Second partial payment: ₹250 via UPI
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 250.00,
+                                "method", "UPI",
+                                "reference", "UPI-TEST-002",
+                                "note", "Fitting trial payment"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(600.0)))
+                .andExpect(jsonPath("$.order.due", is(400.0)))
+                .andExpect(jsonPath("$.order.payment_status", is("PARTIALLY_PAID")));
+
+        // 5. Attempt payment exceeding due balance (due = 400, trying 500) -> 400 Bad Request
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 500.00,
+                                "method", "CASH"
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(status().reason(containsString("exceeds outstanding balance")));
+
+        // 6. Third final payment: exactly ₹400 via BANK_TRANSFER
+        mockMvc.perform(post("/api/tailor/orders/" + orderId + "/payments")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "amount", 400.00,
+                                "method", "BANK_TRANSFER",
+                                "reference", "NEFT-998877",
+                                "note", "Final delivery settlement"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.order.amount_paid", is(1000.0)))
+                .andExpect(jsonPath("$.order.due", is(0.0)))
+                .andExpect(jsonPath("$.order.payment_status", is("PAID")));
+
+        // 7. Verify order details and payment history via GET
+        mockMvc.perform(get("/api/tailor/orders/" + orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.amount_paid", is(1000.0)))
+                .andExpect(jsonPath("$.due", is(0.0)))
+                .andExpect(jsonPath("$.payment_status", is("PAID")))
+                .andExpect(jsonPath("$.payments", hasSize(3)));
+    }
+
+    @Test
+    @DisplayName("Order Deletion Rules: Draft unpaid order can be deleted; order with payments cannot be hard-deleted and must be cancelled")
+    @WithMockUser(username = "testtailor", roles = {"TAILOR"})
+    void testOrderDeletionAndFinancialProtectionRules() throws Exception {
+        // 1. Create a customer
+        String custJson = mockMvc.perform(post("/api/tailor/customers")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("name", "Tanushree Paul", "phone", "9833344556"))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String customerId = (String) mapper.readValue(custJson, Map.class).get("id");
+
+        // Case A: Unpaid draft order (total ₹600, advance ₹0)
+        String unpaidOrdJson = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", customerId,
+                                "items", List.of(Map.of("name", "Frock Stitching", "quantity", 1, "rate", 600.00)),
+                                "advanceAmount", 0.00
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String unpaidOrderId = (String) mapper.readValue(unpaidOrdJson, Map.class).get("id");
+
+        // Can be safely deleted
+        mockMvc.perform(delete("/api/tailor/orders/" + unpaidOrderId)
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", containsString("deleted successfully")));
+
+        // Order is now gone
+        mockMvc.perform(get("/api/tailor/orders/" + unpaidOrderId))
+                .andExpect(status().isNotFound());
+
+        // Case B: Order with recorded payments (total ₹800, advance ₹300)
+        String paidOrdJson = mockMvc.perform(post("/api/tailor/orders")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of(
+                                "customerId", customerId,
+                                "items", List.of(Map.of("name", "Kurti Stitching", "quantity", 1, "rate", 800.00)),
+                                "advanceAmount", 300.00,
+                                "advanceMethod", "UPI"
+                        ))))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String paidOrderId = (String) mapper.readValue(paidOrdJson, Map.class).get("id");
+
+        // Attempting to hard-delete order with payments must be rejected with 409 Conflict
+        mockMvc.perform(delete("/api/tailor/orders/" + paidOrderId)
+                        .with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(status().reason(containsString("recorded payment history")));
+
+        // Order and payments remain completely intact
+        mockMvc.perform(get("/api/tailor/orders/" + paidOrderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.amount_paid", is(300.0)))
+                .andExpect(jsonPath("$.payments", hasSize(1)));
+
+        // Safe cancellation workflow: Update status to CANCELLED
+        mockMvc.perform(patch("/api/tailor/orders/" + paidOrderId + "/status")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(Map.of("status", "CANCELLED"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("CANCELLED")));
+
+        // Payment history is still preserved after cancellation
+        mockMvc.perform(get("/api/tailor/orders/" + paidOrderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("CANCELLED")))
+                .andExpect(jsonPath("$.amount_paid", is(300.0)))
+                .andExpect(jsonPath("$.payments", hasSize(1)));
+    }
 }

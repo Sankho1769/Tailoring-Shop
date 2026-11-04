@@ -7,11 +7,13 @@ import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -23,10 +25,28 @@ public class PublicController {
     private final InvoicePdfService pdfService;
     private final ConcurrentHashMap<String, Deque<Long>> ipRequestTimestamps = new ConcurrentHashMap<>();
 
+    @Value("${app.public-base-url:}")
+    private String configPublicBaseUrl;
+
     public PublicController(JdbcTemplate jdbc, StorageService storage, InvoicePdfService pdfService) {
         this.jdbc = jdbc;
         this.storage = storage;
         this.pdfService = pdfService;
+    }
+
+    private String resolvePublicBaseUrl() {
+        String fromDb = null;
+        try {
+            fromDb = jdbc.queryForObject("SELECT setting_value FROM shop_settings WHERE setting_key='public_base_url'", String.class);
+        } catch (Exception ignored) {}
+        String url = (fromDb != null && !fromDb.isBlank()) ? fromDb.trim() : (configPublicBaseUrl != null ? configPublicBaseUrl.trim() : "");
+        if (!url.isBlank()) {
+            url = url.replaceAll("/+$", "");
+            if (url.contains("localhost") || url.contains("127.0.0.1")) {
+                url = "";
+            }
+        }
+        return url;
     }
 
     private void checkRateLimit(HttpServletRequest request) {
@@ -61,6 +81,7 @@ public class PublicController {
         // Internal payment credentials/QR are strictly for tailor workspace in-shop verification
         out.remove("gpay_qr_key");
         out.remove("upi_id");
+        out.put("publicBaseUrl", resolvePublicBaseUrl());
         return out;
     }
 
@@ -155,11 +176,11 @@ public class PublicController {
     }
 
     @GetMapping("/bills/{id}")
-    public Map<String,Object> getPublicBill(@PathVariable UUID id, @RequestParam(required = false) String phone) {
+    public Map<String,Object> getPublicBill(@PathVariable UUID id, @RequestParam(required = false) String phone, Authentication auth) {
         Map<String,Object> ord;
         try {
             ord = jdbc.queryForMap(
-                    "SELECT o.id, o.order_number, o.customer_id, o.status, " +
+                    "SELECT o.id, o.order_number, o.customer_id, o.measurement_id, o.status, " +
                     "COALESCE(o.payment_status, CASE WHEN o.total > 0 AND o.amount_paid >= o.total THEN 'PAID' WHEN o.amount_paid > 0 THEN 'PARTIALLY_PAID' ELSE 'PAYMENT_DUE' END) AS payment_status, " +
                     "o.due_date, o.subtotal, o.discount, o.total, o.amount_paid, (o.total - o.amount_paid) AS due, o.created_at, " +
                     "c.name AS customer_name, c.phone AS customer_phone " +
@@ -167,6 +188,41 @@ public class PublicController {
         } catch (org.springframework.dao.EmptyResultDataAccessException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Bill not found");
         }
+
+        List<Map<String,Object>> mRows = new ArrayList<>();
+        try {
+            String mIdsRaw = jdbc.queryForObject("SELECT measurement_ids FROM tailoring_orders WHERE id=?", String.class, id);
+            if (mIdsRaw != null && !mIdsRaw.isBlank()) {
+                for (String part : mIdsRaw.split(",")) {
+                    if (!part.trim().isBlank()) {
+                        try {
+                            UUID mid = UUID.fromString(part.trim());
+                            Map<String,Object> mRow = jdbc.queryForMap(
+                                    "SELECT id, garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes, created_at FROM measurements WHERE id=?", mid);
+                            mRows.add(mRow);
+                        } catch (Exception ignored) {}
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        if (mRows.isEmpty()) {
+            Object mId = ord.get("measurement_id");
+            if (mId != null) {
+                try {
+                    Map<String,Object> mRow = jdbc.queryForMap(
+                            "SELECT id, garment_type, unit, CAST(dimensions AS VARCHAR) AS dimensions, fit_preference, notes, created_at FROM measurements WHERE id=?", mId);
+                    mRows.add(mRow);
+                } catch (Exception ignored) {}
+            }
+        }
+        ord.put("measurements", mRows);
+        if (!mRows.isEmpty()) {
+            ord.put("measurement", mRows.get(0));
+        }
+
+        boolean isStaff = auth != null && auth.isAuthenticated() &&
+                auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_TAILOR"));
 
         // Optional phone verification
         if (phone != null && !phone.isBlank()) {
@@ -190,12 +246,16 @@ public class PublicController {
         ord.put("overall_customer_due", currentDue.add(prevDue));
         ord.remove("customer_id");
 
-        // Mask phone for privacy in public view
         String rawPhone = String.valueOf(ord.get("customer_phone"));
         String maskedPhone = rawPhone.length() > 4
                 ? "XXXXXX" + rawPhone.substring(rawPhone.length() - 4)
                 : rawPhone;
         ord.put("customer_phone_masked", maskedPhone);
+        if (isStaff || (phone != null && !phone.isBlank())) {
+            ord.put("customer_phone_unmasked", rawPhone);
+        }
+        ord.put("is_staff", isStaff);
+        ord.put("public_base_url", resolvePublicBaseUrl());
         ord.remove("customer_phone");
 
         // Safe customer line items (excludes internal notes or staff adjustment reasons)
@@ -216,7 +276,8 @@ public class PublicController {
                 "name", shop.getOrDefault("shop_name", "Jolly Ladies Tailor"),
                 "address", shop.getOrDefault("shop_address", ""),
                 "phone", shop.getOrDefault("shop_phone", ""),
-                "whatsapp", shop.getOrDefault("whatsapp_number", "")
+                "whatsapp", shop.getOrDefault("whatsapp_number", ""),
+                "public_base_url", resolvePublicBaseUrl()
         ));
 
         return ord;

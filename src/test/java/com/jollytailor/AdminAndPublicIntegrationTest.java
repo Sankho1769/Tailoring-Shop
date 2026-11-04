@@ -269,4 +269,45 @@ class AdminAndPublicIntegrationTest {
         mockMvc.perform(get("/api/admin/requests"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("Brand assets and responsive static resources serving")
+    void testBrandAssetsAndStaticResources() throws Exception {
+        // Logo and Favicon
+        mockMvc.perform(get("/images/jolly-ladies-tailor-logo.png"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/images/favicon.png"))
+                .andExpect(status().isOk());
+
+        // Hero and Studio Assets
+        mockMvc.perform(get("/images/hero-model-saree.png"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/images/about-sewing-studio.png"))
+                .andExpect(status().isOk());
+
+        // Service Images and Vector SVGs
+        mockMvc.perform(get("/images/services/blouse-stitching.png"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/icons/blouse.svg"))
+                .andExpect(status().isOk());
+
+        // Textures and Gallery
+        mockMvc.perform(get("/images/textures/leaf-shadow-pink.png"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/images/gallery/gallery-01.png"))
+                .andExpect(status().isOk());
+
+        // Static Pages Role Navigation Check
+        mockMvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("href=\"/\"")));
+
+        mockMvc.perform(get("/tailor.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("href=\"/tailor.html\"")));
+
+        mockMvc.perform(get("/admin.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("href=\"/admin.html\"")));
+    }
 }

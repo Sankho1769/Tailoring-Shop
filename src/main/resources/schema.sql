@@ -119,3 +119,34 @@ CREATE TABLE IF NOT EXISTS payments (
   received_by BIGINT REFERENCES app_users(id),
   received_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+
+ALTER TABLE tailoring_orders ADD COLUMN IF NOT EXISTS measurement_ids TEXT;
+
+CREATE TABLE IF NOT EXISTS staff_work (
+  id UUID PRIMARY KEY,
+  staff_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  order_id UUID REFERENCES tailoring_orders(id) ON DELETE SET NULL,
+  work_date DATE NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  amount_owed NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (amount_owed >= 0),
+  notes TEXT,
+  recorded_by BIGINT REFERENCES app_users(id),
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS staff_payments (
+  id UUID PRIMARY KEY,
+  staff_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+  work_id UUID REFERENCES staff_work(id) ON DELETE CASCADE,
+  payment_date DATE NOT NULL,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  payment_method VARCHAR(50) NOT NULL DEFAULT 'CASH',
+  reference VARCHAR(160),
+  notes TEXT,
+  recorded_by BIGINT REFERENCES app_users(id),
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE staff_payments ADD COLUMN IF NOT EXISTS work_id UUID REFERENCES staff_work(id) ON DELETE CASCADE;
+
